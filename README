@@ -1,0 +1,10 @@
+folders:
+    meta: base data type and interface type
+
+    local: handle tun device and user space netstack
+
+    remote: handle websocket tunnel to remote server
+
+    xy: bridge 'up' and 'tun', construct a proxy system
+
+    android: for android build and exports
