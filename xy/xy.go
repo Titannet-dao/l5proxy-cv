@@ -10,8 +10,8 @@ import (
 )
 
 var (
-	once    sync.Once
-	_Global *XY = nil
+	once      sync.Once
+	singleton *XY = nil
 )
 
 type XY struct {
@@ -23,10 +23,10 @@ type XY struct {
 
 func Singleton() *XY {
 	once.Do(func() {
-		_Global = &XY{}
+		singleton = &XY{}
 	})
 
-	return _Global
+	return singleton
 }
 
 func (xy *XY) Startup() error {
