@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"lproxy_tun/meta"
 	"net"
 	"sync"
 	"syscall"
@@ -359,20 +360,11 @@ func (tnl *WSTunnel) onClientReqData(idx uint16, tag uint16, data []byte) {
 	tnl.send(buf)
 }
 
-func (tnl *WSTunnel) onClientCreate(conn *net.TCPConn, idx, tag uint16) error {
-	addr := conn.RemoteAddr()
-	var ip net.IP
-	port := 0
+func (tnl *WSTunnel) onClientCreate(conn meta.TCPConn, idx, tag uint16) {
+	addr := conn.ID().LocalAddress
+	port := conn.ID().LocalPort
 
-	switch addr2 := addr.(type) {
-	case *net.UDPAddr:
-		return fmt.Errorf("tcp conn should not have udp address type")
-	case *net.TCPAddr:
-		ip = addr2.IP
-		port = addr2.Port
-	}
-
-	iplen := len(ip)
+	iplen := addr.Len()
 
 	buf := make([]byte, 8+iplen)
 	buf[0] = cMDReqCreated
@@ -382,29 +374,26 @@ func (tnl *WSTunnel) onClientCreate(conn *net.TCPConn, idx, tag uint16) error {
 	if iplen > 4 {
 		// ipv6
 		buf[5] = 2
+		src := addr.As4()
+		copy(buf[6:], src[:])
 	} else {
 		buf[5] = 0
+		src := addr.As16()
+		copy(buf[6:], src[:])
 	}
 
-	copy(buf[6:], ip)
 	binary.LittleEndian.PutUint16(buf[6+iplen:], uint16(port))
 
 	tnl.send(buf)
-
-	return nil
 }
 
-func (tnl *WSTunnel) acceptTCPConn(conn *net.TCPConn) error {
+func (tnl *WSTunnel) acceptTCPConn(conn meta.TCPConn) error {
 	req, err := tnl.reqq.alloc(conn)
 	if err != nil {
 		return err
 	}
 
-	err = tnl.onClientCreate(conn, req.idx, req.tag)
-
-	if err != nil {
-		return err
-	}
+	tnl.onClientCreate(conn, req.idx, req.tag)
 
 	// start a new goroutine to read data from 'conn'
 	go req.proxy()
@@ -412,7 +401,7 @@ func (tnl *WSTunnel) acceptTCPConn(conn *net.TCPConn) error {
 	return nil
 }
 
-func (tnl *WSTunnel) acceptUDPConn(_ *net.UDPConn) error {
+func (tnl *WSTunnel) acceptUDPConn(_ meta.UDPConn) error {
 	// TODO:
 	return fmt.Errorf("udp conn is not supported yet")
 }

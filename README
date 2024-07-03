@@ -1,7 +1,7 @@
 folders:
     meta: base data type and interface type
 
-    local: handle tun device and user space netstack
+    local: handle tun device and user space netstack, base on xjasonlyu/tun2socks
 
     remote: handle websocket tunnel to remote server
 

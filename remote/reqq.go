@@ -2,7 +2,7 @@ package remote
 
 import (
 	"fmt"
-	"net"
+	"lproxy_tun/meta"
 	"sync"
 )
 
@@ -27,7 +27,7 @@ func newReqq(cap int, t *WSTunnel) *Reqq {
 	return reqq
 }
 
-func (q *Reqq) alloc(conn *net.TCPConn) (*Req, error) {
+func (q *Reqq) alloc(conn meta.TCPConn) (*Req, error) {
 	q.l.Lock()
 	defer q.l.Unlock()
 

@@ -1,7 +1,7 @@
 package remote
 
 import (
-	"net"
+	"lproxy_tun/meta"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -13,7 +13,7 @@ type Req struct {
 
 	owner *WSTunnel
 
-	conn *net.TCPConn
+	conn meta.TCPConn
 }
 
 func newReq(t *WSTunnel, idx uint16) *Req {

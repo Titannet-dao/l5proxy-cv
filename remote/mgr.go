@@ -2,7 +2,7 @@ package remote
 
 import (
 	"fmt"
-	"net"
+	"lproxy_tun/meta"
 	"sync/atomic"
 	"time"
 
@@ -10,11 +10,11 @@ import (
 )
 
 type MgrConfig struct {
-	websocketURL string
-	tunnelCount  int
-	tunnelCap    int
+	WebsocketURL string
+	TunnelCount  int
+	TunnelCap    int
 
-	protector func(fd uint64)
+	Protector func(fd uint64)
 }
 
 type Mgr struct {
@@ -25,21 +25,22 @@ type Mgr struct {
 	isActivated bool
 }
 
-func NewMgr(config MgrConfig) *Mgr {
-	if len(config.websocketURL) == 0 {
-		config.websocketURL = "ws://127.0.0.1:8080/ws"
+func NewMgr(config *MgrConfig) *Mgr {
+	cfg := *config
+	if len(cfg.WebsocketURL) == 0 {
+		cfg.WebsocketURL = "ws://127.0.0.1:8080/ws"
 	}
 
-	if config.tunnelCount < 1 {
-		config.tunnelCount = 1
+	if cfg.TunnelCount < 1 {
+		cfg.TunnelCount = 1
 	}
 
-	if config.tunnelCap < 1 {
-		config.tunnelCap = 100
+	if cfg.TunnelCap < 1 {
+		cfg.TunnelCap = 100
 	}
 
 	mgr := &Mgr{
-		config: config,
+		config: cfg,
 	}
 
 	return mgr
@@ -48,11 +49,11 @@ func NewMgr(config MgrConfig) *Mgr {
 func (mgr *Mgr) Startup() {
 	config := &mgr.config
 
-	mgr.tunnels = make([]*WSTunnel, 0, config.tunnelCount)
-	for i := 0; i < config.tunnelCount; i++ {
-		tnl := newTunnel(config.websocketURL, config.tunnelCap)
-		if config.protector != nil {
-			tnl.protector = config.protector
+	mgr.tunnels = make([]*WSTunnel, 0, config.TunnelCount)
+	for i := 0; i < config.TunnelCount; i++ {
+		tnl := newTunnel(config.WebsocketURL, config.TunnelCap)
+		if config.Protector != nil {
+			tnl.protector = config.Protector
 		}
 
 		mgr.tunnels = append(mgr.tunnels, tnl)
@@ -92,7 +93,7 @@ func (mgr *Mgr) keepalive() {
 	log.Info("mgr keepalive goroutine exit")
 }
 
-func (mgr *Mgr) AcceptTCPConn(conn *net.TCPConn) {
+func (mgr *Mgr) HandleTCP(conn meta.TCPConn) {
 	handled := false
 	defer func() {
 		if !handled {
@@ -116,7 +117,7 @@ func (mgr *Mgr) AcceptTCPConn(conn *net.TCPConn) {
 	handled = true
 }
 
-func (mgr *Mgr) AcceptUDPConn(conn *net.UDPConn) {
+func (mgr *Mgr) HandleUDP(conn meta.UDPConn) {
 	handled := false
 	defer func() {
 		if !handled {
