@@ -5,7 +5,7 @@ package local
 import (
 	"lproxy_tun/meta"
 
-	glog "gvisor.dev/gvisor/pkg/log"
+	log "github.com/sirupsen/logrus"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 	"gvisor.dev/gvisor/pkg/tcpip/transport/udp"
@@ -21,10 +21,13 @@ func withUDPHandler(handle func(meta.UDPConn)) Option {
 			)
 			ep, err := r.CreateEndpoint(&wq)
 			if err != nil {
-				glog.Debugf("forward udp request: %s:%d->%s:%d: %s",
+				log.Errorf("forward udp request failed: %s:%d->%s:%d: %s",
 					id.RemoteAddress, id.RemotePort, id.LocalAddress, id.LocalPort, err)
 				return
 			}
+
+			log.Debugf("forward udp request: %s:%d->%s:%d",
+				id.RemoteAddress, id.RemotePort, id.LocalAddress, id.LocalPort)
 
 			conn := &udpConn{
 				UDPConn: gonet.NewUDPConn(&wq, ep),

@@ -29,9 +29,11 @@ func Singleton() *XY {
 	return singleton
 }
 
-func (xy *XY) Startup() error {
+func (xy *XY) Startup(fd int, mtu uint32) error {
 	xy.lock.Lock()
 	defer xy.lock.Unlock()
+
+	log.Info("xy.Startup called")
 	if xy.local != nil {
 		return fmt.Errorf("xy has startup")
 	}
@@ -41,12 +43,18 @@ func (xy *XY) Startup() error {
 
 	localCfg := &local.LocalConfig{
 		TransportHandler: remote,
+		FD:               fd,
+		MTU:              mtu,
 	}
 
 	local := local.NewMgr(localCfg)
 
-	remote.Startup()
-	err := local.Startup()
+	err := remote.Startup()
+	if err != nil {
+		log.Errorf("remote startup failed:%v", err)
+	}
+
+	err = local.Startup()
 	if err != nil {
 		log.Errorf("local startup failed:%v", err)
 	}
@@ -54,13 +62,17 @@ func (xy *XY) Startup() error {
 	xy.local = local
 	xy.remote = remote
 
+	log.Info("xy.Startup completed")
 	return nil
 }
 
 func (xy *XY) Shutdown() error {
 	xy.lock.Lock()
 	defer xy.lock.Unlock()
-	if xy.local != nil {
+
+	log.Info("xy.Shutdown called")
+
+	if xy.local == nil {
 		return fmt.Errorf("xy has not yet startup")
 	}
 
@@ -69,11 +81,15 @@ func (xy *XY) Shutdown() error {
 		log.Errorf("local shutdown failed:%v", err)
 	}
 
-	xy.remote.Shutdown()
+	err = xy.remote.Shutdown()
+	if err != nil {
+		log.Errorf("remote shutdown failed:%v", err)
+	}
 
 	xy.local = nil
 	xy.remote = nil
 
+	log.Info("xy.Shutdown completed")
 	return nil
 }
 

@@ -29,6 +29,9 @@ func openTun() (int, error) {
 }
 
 func main() {
+	// for debug
+	log.SetLevel(log.DebugLevel)
+
 	fd, err := openTun()
 	if err != nil {
 		log.Fatal(err)

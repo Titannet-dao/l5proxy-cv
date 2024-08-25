@@ -46,7 +46,13 @@ func NewMgr(config *MgrConfig) *Mgr {
 	return mgr
 }
 
-func (mgr *Mgr) Startup() {
+func (mgr *Mgr) Startup() error {
+	log.Info("remote.Mgr.Startup called")
+
+	if mgr.isActivated {
+		return fmt.Errorf("remote.Mgr already startup")
+	}
+
 	config := &mgr.config
 
 	mgr.tunnels = make([]*WSTunnel, 0, config.TunnelCount)
@@ -64,9 +70,18 @@ func (mgr *Mgr) Startup() {
 	mgr.isActivated = true
 
 	go mgr.keepalive()
+
+	log.Info("remote.Mgr.Startup completed")
+	return nil
 }
 
-func (mgr *Mgr) Shutdown() {
+func (mgr *Mgr) Shutdown() error {
+	log.Info("remote.Mgr.Shutdown called")
+
+	if !mgr.isActivated {
+		return fmt.Errorf("remote.Mgr isn't startup")
+	}
+
 	count := len(mgr.tunnels)
 	for i := 0; i < count; i++ {
 		tnl := mgr.tunnels[i]
@@ -74,12 +89,15 @@ func (mgr *Mgr) Shutdown() {
 	}
 
 	mgr.isActivated = false
+
+	log.Info("remote.Mgr.Shutdown completed")
+	return nil
 }
 
 func (mgr *Mgr) keepalive() {
 	count := len(mgr.tunnels)
 
-	log.Infof("mgr keepalive goroutine start, tunnel count:%d", count)
+	log.Infof("remote.Mgr keepalive goroutine start, tunnel count:%d", count)
 
 	for mgr.isActivated {
 		time.Sleep(time.Second * 5)
@@ -90,7 +108,7 @@ func (mgr *Mgr) keepalive() {
 		}
 	}
 
-	log.Info("mgr keepalive goroutine exit")
+	log.Info("remote.Mgr keepalive goroutine exit")
 }
 
 func (mgr *Mgr) HandleTCP(conn meta.TCPConn) {
@@ -104,13 +122,13 @@ func (mgr *Mgr) HandleTCP(conn meta.TCPConn) {
 	// allocate a usable tunnel
 	tunnel, err := mgr.allocateWSTunnel()
 	if err != nil {
-		log.Errorf("WSTunnelMgr.allocateWSTunnel failed: %v", err)
+		log.Errorf("mgr.allocateWSTunnel failed: %v", err)
 		return
 	}
 
 	err = tunnel.acceptTCPConn(conn)
 	if err != nil {
-		log.Errorf("WSTunnel.acceptTCPConn failed: %v", err)
+		log.Errorf("tunnel.acceptTCPConn failed: %v", err)
 		return
 	}
 
@@ -128,13 +146,13 @@ func (mgr *Mgr) HandleUDP(conn meta.UDPConn) {
 	// allocate a usable tunnel
 	tunnel, err := mgr.allocateWSTunnel()
 	if err != nil {
-		log.Errorf("Mgr.allocateWSTunnel failed: %v", err)
+		log.Errorf("mgr.allocateWSTunnel failed: %v", err)
 		return
 	}
 
 	err = tunnel.acceptUDPConn(conn)
 	if err != nil {
-		log.Errorf("WSTunnel.acceptUDPConn failed: %v", err)
+		log.Errorf("tunnel.acceptUDPConn failed: %v", err)
 		return
 	}
 
@@ -169,5 +187,5 @@ func (mgr *Mgr) allocateWSTunnel() (*WSTunnel, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("failed to find a valid tunnel to accept tcp conn")
+	return nil, fmt.Errorf("failed to find a valid tunnel")
 }

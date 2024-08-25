@@ -55,7 +55,7 @@ func createStack(cfg *StackConfig) (*stack.Stack, error) {
 	})
 
 	// Generate unique NIC id.
-	nicID := tcpip.NICID(s.UniqueID())
+	nicID := tcpip.NICID(s.NextNICID())
 
 	opts = append(opts,
 		// Important: We must initiate transport protocol handlers
