@@ -30,4 +30,12 @@ type UDPConn interface {
 type TransportHandler interface {
 	HandleTCP(TCPConn)
 	HandleUDP(UDPConn)
+
+	OnStackReady(LocalGivsorNetwork)
+}
+
+// LocalGivsorNetwork is for creating connections
+type LocalGivsorNetwork interface {
+	NewTCP4(id *stack.TransportEndpointID) (TCPConn, error)
+	NewUDP4(id *stack.TransportEndpointID) (UDPConn, error)
 }

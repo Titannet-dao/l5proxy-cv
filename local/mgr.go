@@ -5,7 +5,13 @@ import (
 	"lproxy_tun/meta"
 
 	"golang.org/x/sys/unix"
+	"gvisor.dev/gvisor/pkg/tcpip"
+	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
+	"gvisor.dev/gvisor/pkg/tcpip/network/ipv4"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
+	"gvisor.dev/gvisor/pkg/tcpip/transport/tcp"
+	"gvisor.dev/gvisor/pkg/tcpip/transport/udp"
+	"gvisor.dev/gvisor/pkg/waiter"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -56,6 +62,8 @@ func (mgr *Mgr) Startup() error {
 	}
 
 	mgr.stack = stack
+
+	mgr.cfg.TransportHandler.OnStackReady(mgr)
 
 	log.Info("local.Mgr Startup completed")
 	return nil
@@ -108,4 +116,61 @@ func (mgr *Mgr) createStack() (*stack.Stack, error) {
 	}
 
 	return createStack(stackCfg)
+}
+
+func (mgr *Mgr) NewTCP4(id *stack.TransportEndpointID) (meta.TCPConn, error) {
+	var (
+		wq waiter.Queue
+	)
+
+	transport := mgr.stack.TransportProtocolInstance(tcp.ProtocolNumber)
+	ep, err := transport.NewEndpoint(ipv4.ProtocolNumber, &wq)
+	if err != nil {
+		return nil, fmt.Errorf("local.Mgr NewTCP4 NewEndpoint failed:%s", err)
+	}
+
+	// TODO: bind to non-local address/port
+
+	// TODO: connect to remote address/port
+
+	conn := &tcpConn{
+		TCPConn: gonet.NewTCPConn(&wq, ep),
+		id:      *id,
+	}
+
+	return conn, nil
+}
+
+func (mgr *Mgr) NewUDP4(id *stack.TransportEndpointID) (meta.UDPConn, error) {
+	var (
+		wq waiter.Queue
+	)
+
+	transport := mgr.stack.TransportProtocolInstance(udp.ProtocolNumber)
+	ep, err := transport.NewEndpoint(ipv4.ProtocolNumber, &wq)
+	if err != nil {
+		return nil, fmt.Errorf("local.Mgr NewUDP4: NewEndpoint failed:%s", err)
+	}
+
+	fullAddr := tcpip.FullAddress{
+		Addr: id.LocalAddress,
+		Port: id.LocalPort,
+	}
+
+	// bind to a 'non-local' address/port
+	err = ep.Bind(fullAddr)
+	if err != nil {
+		ep.Close()
+		return nil, fmt.Errorf("local.Mgr NewUDP4: Bind UDP failed:%s", err)
+	}
+
+	// lingh: UDP does not connect to specific peer, thus allow it send to many peers
+	// err = ep.Connect(fullAddr2)
+
+	conn := &udpConn{
+		UDPConn: gonet.NewUDPConn(&wq, ep),
+		id:      *id,
+	}
+
+	return conn, nil
 }

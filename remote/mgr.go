@@ -23,6 +23,8 @@ type Mgr struct {
 	tunnels []*WSTunnel
 
 	isActivated bool
+
+	localGvisor meta.LocalGivsorNetwork
 }
 
 func NewMgr(config *MgrConfig) *Mgr {
@@ -44,6 +46,10 @@ func NewMgr(config *MgrConfig) *Mgr {
 	}
 
 	return mgr
+}
+
+func (mgr *Mgr) OnStackReady(localGvisor meta.LocalGivsorNetwork) {
+	mgr.localGvisor = localGvisor
 }
 
 func (mgr *Mgr) Startup() error {
