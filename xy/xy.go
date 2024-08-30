@@ -2,6 +2,7 @@ package xy
 
 import (
 	"fmt"
+	"lproxy_tun/config"
 	"lproxy_tun/local"
 	"lproxy_tun/remote"
 	"sync"
@@ -29,7 +30,7 @@ func Singleton() *XY {
 	return singleton
 }
 
-func (xy *XY) Startup(fd int, mtu uint32) error {
+func (xy *XY) Startup(fd int, mtu uint32, cfg *config.Config) error {
 	xy.lock.Lock()
 	defer xy.lock.Unlock()
 
@@ -38,7 +39,7 @@ func (xy *XY) Startup(fd int, mtu uint32) error {
 		return fmt.Errorf("xy has startup")
 	}
 
-	remoteCfg := &remote.MgrConfig{}
+	remoteCfg := &remote.MgrConfig{WebsocketURL: cfg.Server.URL, TunnelCount: cfg.Tun.Count, TunnelCap: cfg.Tun.Cap}
 	remote := remote.NewMgr(remoteCfg)
 
 	localCfg := &local.LocalConfig{

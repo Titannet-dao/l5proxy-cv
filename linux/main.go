@@ -1,7 +1,9 @@
 package main
 
 import (
+	"flag"
 	"fmt"
+	"lproxy_tun/config"
 	"lproxy_tun/xy"
 	"os"
 	"os/signal"
@@ -30,6 +32,15 @@ func openTun() (int, error) {
 
 func main() {
 	// for debug
+	var configFile string
+	flag.StringVar(&configFile, "c", "", "Config file path")
+	flag.Parse()
+
+	cfg, err := config.ParseConfig(configFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	log.SetLevel(log.DebugLevel)
 
 	fd, err := openTun()
@@ -37,7 +48,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	err = xy.Singleton().Startup(fd, 1500)
+	err = xy.Singleton().Startup(fd, 1500, cfg)
 	if err != nil {
 		log.Fatal(err)
 	}

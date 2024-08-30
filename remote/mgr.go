@@ -68,6 +68,7 @@ func (mgr *Mgr) Startup() error {
 			tnl.protector = config.Protector
 		}
 
+		tnl.mgr = mgr
 		mgr.tunnels = append(mgr.tunnels, tnl)
 
 		tnl.start()
@@ -111,6 +112,11 @@ func (mgr *Mgr) keepalive() {
 		for i := 0; i < count; i++ {
 			tnl := mgr.tunnels[i]
 			tnl.keepalive()
+		}
+
+		for i := 0; i < count; i++ {
+			tnl := mgr.tunnels[i]
+			tnl.cache.keepalive()
 		}
 	}
 

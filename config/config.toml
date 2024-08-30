@@ -1,0 +1,6 @@
+[server]
+url = ""
+
+[tun]
+count= 1
+cap = 100
