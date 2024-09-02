@@ -22,7 +22,7 @@ func newUstub(tnl *WSTunnel, conn meta.UDPConn) *Ustub {
 
 func (u *Ustub) srcAddress() *net.UDPAddr {
 	conn := u.conn
-	address := &net.UDPAddr{Port: int(conn.ID().RemotePort), IP: conn.ID().LocalAddress.AsSlice()}
+	address := &net.UDPAddr{Port: int(conn.ID().RemotePort), IP: conn.ID().RemoteAddress.AsSlice()}
 	return address
 }
 
