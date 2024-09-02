@@ -3,112 +3,61 @@ package remote
 import (
 	"encoding/binary"
 	"encoding/hex"
+	"net"
 	"sync"
 	"time"
 )
 
 const udpTimeOut = 120 * time.Second
 
-type ChildUstubs map[string]*Ustub
-
 type Cache struct {
 	// key=hash(src+dest)
-	// ustubs sync.Map
-	ustubs map[string]ChildUstubs
-	lock   sync.Mutex
+	ustubs sync.Map
 }
 
 func newCache() *Cache {
-	return &Cache{ustubs: make(map[string]ChildUstubs)}
+	return &Cache{ustubs: sync.Map{}}
 }
 
 func (c *Cache) add(ustub *Ustub) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	parentKey := c.key(ustub.srcAddress())
-	childKey := c.key(ustub.destAddress())
-
-	childs := c.ustubs[parentKey]
-	if childs == nil {
-		childs = make(map[string]*Ustub)
-	}
-
-	childs[childKey] = ustub
-	c.ustubs[parentKey] = childs
+	key := c.key(ustub.srcAddress(), ustub.destAddress())
+	c.ustubs.Store(key, ustub)
 }
 
-func (c *Cache) get(src, dest Address) *Ustub {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	parentKey := c.key(src)
-	childKey := c.key(dest)
-	childs := c.ustubs[parentKey]
-	if childs == nil {
-		return nil
+func (c *Cache) get(src, dest *net.UDPAddr) *Ustub {
+	key := c.key(src, dest)
+	v, ok := c.ustubs.Load(key)
+	if ok {
+		return v.(*Ustub)
 	}
-	return childs[childKey]
-}
-
-func (c *Cache) getWithSrc(src Address) *Ustub {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	parentKey := c.key(src)
-	childs := c.ustubs[parentKey]
-	if childs == nil {
-		return nil
-	}
-	for _, ustub := range childs {
-		return ustub
-	}
-
 	return nil
 }
 
-func (c *Cache) remove(src, dest Address) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	parentKey := c.key(src)
-	childKey := c.key(dest)
-
-	childs := c.ustubs[parentKey]
-	if childs == nil {
-		return
-	}
-
-	delete(childs, childKey)
-
-	if len(childs) == 0 {
-		delete(c.ustubs, parentKey)
-		return
-	}
-
-	c.ustubs[parentKey] = childs
-}
-
 func (c *Cache) keepalive() {
-	deleteUstubs := make([]*Ustub, 0)
-	for _, childs := range c.ustubs {
-		for _, ustub := range childs {
+	deleteKeys := make([]string, 0)
+	c.ustubs.Range(func(key, value any) bool {
+		ustub, ok := value.(*Ustub)
+		if ok {
 			if time.Since(ustub.lastActvity) > udpTimeOut {
-				deleteUstubs = append(deleteUstubs, ustub)
+				deleteKeys = append(deleteKeys, key.(string))
 			}
 		}
-	}
+		return true
+	})
 
-	for _, ustubs := range deleteUstubs {
-		c.remove(ustubs.srcAddress(), ustubs.destAddress())
+	for _, key := range deleteKeys {
+		c.ustubs.Delete(key)
 	}
 }
 
-func (c *Cache) key(addr Address) string {
-	buf := make([]byte, 2+len(addr.ip))
+func (c *Cache) key(src, dest *net.UDPAddr) string {
+	buf := make([]byte, 4+len(src.IP)+len(dest.IP))
 
-	binary.LittleEndian.PutUint16(buf[0:], addr.port)
-	copy(buf[2:], addr.ip)
+	binary.LittleEndian.PutUint16(buf[0:], uint16(src.Port))
+	copy(buf[2:], src.IP)
+
+	binary.LittleEndian.PutUint16(buf[2+len(src.IP):], uint16(dest.Port))
+	copy(buf[4+len(src.IP):], dest.IP)
 
 	return hex.EncodeToString(buf)
 }

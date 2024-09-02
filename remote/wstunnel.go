@@ -413,8 +413,10 @@ func (tnl *WSTunnel) acceptTCPConn(conn meta.TCPConn) error {
 }
 
 func (tnl *WSTunnel) acceptUDPConn(conn meta.UDPConn) error {
-	src, dest := getAddress(conn)
-	log.Infof("acceptUDPConn src %s:%d dest %s:%d", src.ipString(), src.port, dest.ipString(), dest.port)
+	src := &net.UDPAddr{Port: int(conn.ID().RemotePort), IP: conn.ID().RemoteAddress.AsSlice()}
+	dest := &net.UDPAddr{Port: int(conn.ID().LocalPort), IP: conn.ID().LocalAddress.AsSlice()}
+
+	log.Infof("acceptUDPConn src %s dest %s", src.String(), dest.String())
 
 	ustub := tnl.cache.get(src, dest)
 	if ustub == nil {
@@ -422,7 +424,7 @@ func (tnl *WSTunnel) acceptUDPConn(conn meta.UDPConn) error {
 		tnl.cache.add(ustub)
 		go ustub.proxy()
 	} else {
-		log.Error("conn src %s:%d dest %s:%d already exist", src.ipString(), src.port, dest.ipString(), dest.port)
+		log.Error("conn src %s dest %s already exist", src.String(), dest.String())
 	}
 
 	return nil
@@ -430,16 +432,16 @@ func (tnl *WSTunnel) acceptUDPConn(conn meta.UDPConn) error {
 
 func (tnl *WSTunnel) onServerUDPData(msg []byte) error {
 	src := parseAddress(msg[1:])
-	dest := parseAddress(msg[1+3+len(src.ip):])
+	dest := parseAddress(msg[1+3+len(src.IP):])
 
-	log.Infof("onServerUDPData src %s:%d dest %s:%d", src.ipString(), src.port, dest.ipString(), dest.port)
+	log.Infof("onServerUDPData src %s dest %s", src.String(), dest.String())
 
 	ustub := tnl.cache.get(src, dest)
 	if ustub == nil {
-		log.Warnf("onServerUDPData can not math the udp stub src %s:%d, dest %s:%d", src.ipString(), src.port, dest.ipString(), dest.port)
+		log.Warnf("onServerUDPData can not math the udp stub src %s, dest %s", src.String(), dest.String())
 		conn, err := tnl.newUDP(src, dest)
 		if err != nil {
-			log.Errorf("onServerUDPData new UDPConn src %s:%d dest %s:%d failed, %s", src.ipString(), src.port, dest.ipString(), dest.port, err.Error())
+			log.Errorf("onServerUDPData new UDPConn src %s dest %s failed, %s", src.String(), dest.String(), err.Error())
 			return nil
 		}
 
@@ -447,18 +449,15 @@ func (tnl *WSTunnel) onServerUDPData(msg []byte) error {
 		tnl.cache.add(ustub)
 		go ustub.proxy()
 
-		log.Infof("onServerUDPData, new UDPConn src %s:%d dest %s:%d", src.ipString(), src.port, dest.ipString(), dest.port)
+		log.Infof("onServerUDPData, new UDPConn src %s dest %s", src.String(), dest.String())
 	}
-	addr := net.UDPAddr{
-		IP:   src.ip,
-		Port: int(src.port),
-	}
+
 	// 7 = cmd + ipType1 + port1 + ipType2 + port2
-	skip := 7 + len(src.ip) + len(dest.ip)
-	return ustub.writeTo(msg[skip:], &addr)
+	skip := 7 + len(src.IP) + len(dest.IP)
+	return ustub.writeTo(msg[skip:], src)
 }
 
-func (tnl *WSTunnel) onClientUDPData(msg []byte, src, dest Address) error {
+func (tnl *WSTunnel) onClientUDPData(msg []byte, src, dest *net.UDPAddr) error {
 	srcAddrBuf := writeAddress(src)
 	destAddrBuf := writeAddress(dest)
 
@@ -473,16 +472,16 @@ func (tnl *WSTunnel) onClientUDPData(msg []byte, src, dest Address) error {
 	return nil
 }
 
-func (tnl *WSTunnel) newUDP(src, dest Address) (meta.UDPConn, error) {
+func (tnl *WSTunnel) newUDP(src, dest *net.UDPAddr) (meta.UDPConn, error) {
 	if tnl.mgr.localGvisor == nil {
 		return nil, fmt.Errorf("localGvisor == nil")
 	}
 
 	id := &stack.TransportEndpointID{
-		LocalPort:     dest.port,
-		LocalAddress:  tcpip.AddrFromSlice(dest.ip),
-		RemotePort:    src.port,
-		RemoteAddress: tcpip.AddrFromSlice(src.ip),
+		LocalPort:     uint16(dest.Port),
+		LocalAddress:  tcpip.AddrFromSlice(dest.IP),
+		RemotePort:    uint16(src.Port),
+		RemoteAddress: tcpip.AddrFromSlice(src.IP),
 	}
 
 	newUDP4, err := tnl.mgr.localGvisor.NewUDP4(id)
@@ -493,35 +492,13 @@ func (tnl *WSTunnel) newUDP(src, dest Address) (meta.UDPConn, error) {
 	return newUDP4, nil
 }
 
-func getAddress(conn meta.UDPConn) (src, dest Address) {
-	srcAddr := Address{port: conn.ID().RemotePort, ip: make([]byte, conn.ID().RemoteAddress.Len())}
-	if conn.ID().RemoteAddress.Len() > 4 {
-		remoteAddress := conn.ID().RemoteAddress.As16()
-		copy(srcAddr.ip, remoteAddress[:])
-	} else {
-		remoteAddress := conn.ID().RemoteAddress.As4()
-		copy(srcAddr.ip, remoteAddress[:])
-	}
-
-	destAddr := Address{port: conn.ID().LocalPort, ip: make([]byte, conn.ID().LocalAddress.Len())}
-	if conn.ID().LocalAddress.Len() > 4 {
-		localAddress := conn.ID().LocalAddress.As16()
-		copy(destAddr.ip, localAddress[:])
-	} else {
-		localAddress := conn.ID().LocalAddress.As4()
-		copy(destAddr.ip, localAddress[:])
-	}
-
-	return srcAddr, destAddr
-}
-
-func writeAddress(addrss Address) []byte {
+func writeAddress(addrss *net.UDPAddr) []byte {
 	// 3 = iptype(1) + port(2)
-	buf := make([]byte, 3+len(addrss.ip))
+	buf := make([]byte, 3+len(addrss.IP))
 	// add port
-	binary.LittleEndian.PutUint16(buf[0:], addrss.port)
+	binary.LittleEndian.PutUint16(buf[0:], uint16(addrss.Port))
 	// set ip type
-	if len(addrss.ip) > 4 {
+	if len(addrss.IP) > net.IPv4len {
 		// ipv6
 		buf[2] = 2
 	} else {
@@ -529,11 +506,11 @@ func writeAddress(addrss Address) []byte {
 		buf[2] = 0
 	}
 
-	copy(buf[3:], addrss.ip)
+	copy(buf[3:], addrss.IP)
 	return buf
 }
 
-func parseAddress(msg []byte) Address {
+func parseAddress(msg []byte) *net.UDPAddr {
 	// skip cmd
 	var ip []byte
 
@@ -555,5 +532,5 @@ func parseAddress(msg []byte) Address {
 		offset += 16
 	}
 
-	return Address{ip: ip, port: port}
+	return &net.UDPAddr{IP: ip, Port: int(port)}
 }

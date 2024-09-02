@@ -4,25 +4,10 @@ import (
 	"fmt"
 	"lproxy_tun/meta"
 	"net"
-	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 )
-
-type Address struct {
-	ip   []byte
-	port uint16
-}
-
-func (a Address) ipString() string {
-	ip := ""
-	for _, b := range a.ip {
-		ip = ip + fmt.Sprintf("%d", b) + "."
-	}
-
-	return strings.TrimSuffix(ip, ".")
-}
 
 type Ustub struct {
 	tnl         *WSTunnel
@@ -35,33 +20,16 @@ func newUstub(tnl *WSTunnel, conn meta.UDPConn) *Ustub {
 	return ustub
 }
 
-func (u *Ustub) srcAddress() Address {
+func (u *Ustub) srcAddress() *net.UDPAddr {
 	conn := u.conn
-
-	address := Address{port: conn.ID().RemotePort}
-	if conn.ID().RemoteAddress.Len() > 4 {
-		src := conn.ID().RemoteAddress.As16()
-		address.ip = src[:]
-	} else {
-		src := conn.ID().RemoteAddress.As4()
-		address.ip = src[:]
-	}
-
+	address := &net.UDPAddr{Port: int(conn.ID().RemotePort), IP: conn.ID().LocalAddress.AsSlice()}
 	return address
 }
 
-func (u *Ustub) destAddress() Address {
+func (u *Ustub) destAddress() *net.UDPAddr {
 	conn := u.conn
 
-	address := Address{port: conn.ID().LocalPort}
-	if conn.ID().LocalAddress.Len() > 4 {
-		dest := conn.ID().LocalAddress.As16()
-		address.ip = dest[:]
-	} else {
-		dest := conn.ID().LocalAddress.As4()
-		address.ip = dest[:]
-	}
-
+	address := &net.UDPAddr{Port: int(conn.ID().LocalPort), IP: conn.ID().LocalAddress.AsSlice()}
 	return address
 }
 

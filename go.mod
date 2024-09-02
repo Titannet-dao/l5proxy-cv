@@ -9,7 +9,10 @@ require (
 	gvisor.dev/gvisor v0.0.0-20240713103206-39d6c232e61d
 )
 
-require github.com/google/btree v1.1.2 // indirect
+require (
+	github.com/BurntSushi/toml v1.4.0 // indirect
+	github.com/google/btree v1.1.2 // indirect
+)
 
 require (
 	github.com/gorilla/websocket v1.5.3
