@@ -418,14 +418,14 @@ func (tnl *WSTunnel) acceptUDPConn(conn meta.UDPConn) error {
 
 	log.Infof("acceptUDPConn src %s dest %s", src.String(), dest.String())
 
-	ustub := tnl.cache.get(src, dest)
-	if ustub == nil {
-		ustub = newUstub(tnl, conn)
-		tnl.cache.add(ustub)
-		go ustub.proxy()
-	} else {
-		log.Error("conn src %s dest %s already exist", src.String(), dest.String())
+	ustub := tnl.cache.getForwardUstubs(src, dest)
+	if ustub != nil {
+		return fmt.Errorf("conn src %s dest %s already exist", src.String(), dest.String())
 	}
+
+	ustub = newUstub(tnl, conn)
+	tnl.cache.addForwardUstubs(ustub)
+	go ustub.proxy()
 
 	return nil
 }
@@ -434,11 +434,10 @@ func (tnl *WSTunnel) onServerUDPData(msg []byte) error {
 	src := parseAddress(msg[1:])
 	dest := parseAddress(msg[1+3+len(src.IP):])
 
-	log.Infof("onServerUDPData src %s dest %s", src.String(), dest.String())
+	log.Debugf("onServerUDPData src %s dest %s", src.String(), dest.String())
 
-	ustub := tnl.cache.get(src, dest)
+	ustub := tnl.cache.getReverseUstubs(src, dest)
 	if ustub == nil {
-		log.Warnf("onServerUDPData can not math the udp stub src %s, dest %s", src.String(), dest.String())
 		conn, err := tnl.newUDP(src, dest)
 		if err != nil {
 			log.Errorf("onServerUDPData new UDPConn src %s dest %s failed, %s", src.String(), dest.String(), err.Error())
@@ -446,10 +445,10 @@ func (tnl *WSTunnel) onServerUDPData(msg []byte) error {
 		}
 
 		ustub = newUstub(tnl, conn)
-		tnl.cache.add(ustub)
+		tnl.cache.addReverseUstubs(ustub)
 		go ustub.proxy()
 
-		log.Infof("onServerUDPData, new UDPConn src %s dest %s", src.String(), dest.String())
+		log.Infof("onServerUDPData, new UDPConn src %s dest %s for reverse proxy", src.String(), dest.String())
 	}
 
 	// 7 = cmd + ipType1 + port1 + ipType2 + port2
@@ -458,6 +457,7 @@ func (tnl *WSTunnel) onServerUDPData(msg []byte) error {
 }
 
 func (tnl *WSTunnel) onClientUDPData(msg []byte, src, dest *net.UDPAddr) error {
+	log.Debugf("onClientUDPData src %s, dest %s", src, dest)
 	srcAddrBuf := writeAddress(src)
 	destAddrBuf := writeAddress(dest)
 
@@ -511,9 +511,6 @@ func writeAddress(addrss *net.UDPAddr) []byte {
 }
 
 func parseAddress(msg []byte) *net.UDPAddr {
-	// skip cmd
-	var ip []byte
-
 	offset := 0
 	port := binary.LittleEndian.Uint16(msg[offset:])
 	offset += 2
@@ -524,13 +521,15 @@ func parseAddress(msg []byte) *net.UDPAddr {
 	switch ipType {
 	case 0:
 		// ipv4
-		ip = msg[offset : offset+4]
-		offset += 4
+		ip := make([]byte, 4)
+		copy(ip, msg[offset:offset+4])
+		return &net.UDPAddr{IP: ip, Port: int(port)}
 	case 2:
 		// ipv6
-		ip = msg[offset : offset+16]
-		offset += 16
+		ip := make([]byte, 16)
+		copy(ip, msg[offset:offset+16])
+		return &net.UDPAddr{IP: ip, Port: int(port)}
 	}
 
-	return &net.UDPAddr{IP: ip, Port: int(port)}
+	return nil
 }

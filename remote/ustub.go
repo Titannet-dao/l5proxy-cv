@@ -28,7 +28,6 @@ func (u *Ustub) srcAddress() *net.UDPAddr {
 
 func (u *Ustub) destAddress() *net.UDPAddr {
 	conn := u.conn
-
 	address := &net.UDPAddr{Port: int(conn.ID().LocalPort), IP: conn.ID().LocalAddress.AsSlice()}
 	return address
 }
@@ -74,7 +73,7 @@ func (u *Ustub) proxy() {
 	for {
 		n, err := conn.Read(buf)
 		if err != nil {
-			log.Error("UDP read error %s", err.Error())
+			log.Infof("Read error %s,UDPConn %s %s was close", err.Error(), u.srcAddress().String(), u.destAddress().String())
 			break
 		}
 
