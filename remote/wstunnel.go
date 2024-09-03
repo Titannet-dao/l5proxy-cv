@@ -89,6 +89,7 @@ func (tnl *WSTunnel) stop() {
 	}
 
 	tnl.reqq.cleanup()
+	tnl.cache.cleanup()
 }
 
 func (tnl *WSTunnel) serveWebsocket() {
@@ -418,13 +419,13 @@ func (tnl *WSTunnel) acceptUDPConn(conn meta.UDPConn) error {
 
 	log.Infof("acceptUDPConn src %s dest %s", src.String(), dest.String())
 
-	ustub := tnl.cache.getForwardUstubs(src, dest)
+	ustub := tnl.cache.get(src, dest)
 	if ustub != nil {
 		return fmt.Errorf("conn src %s dest %s already exist", src.String(), dest.String())
 	}
 
 	ustub = newUstub(tnl, conn)
-	tnl.cache.addForwardUstubs(ustub)
+	tnl.cache.add(ustub)
 	go ustub.proxy()
 
 	return nil
@@ -436,7 +437,7 @@ func (tnl *WSTunnel) onServerUDPData(msg []byte) error {
 
 	log.Debugf("onServerUDPData src %s dest %s", src.String(), dest.String())
 
-	ustub := tnl.cache.getReverseUstubs(src, dest)
+	ustub := tnl.cache.get(src, dest)
 	if ustub == nil {
 		conn, err := tnl.newUDP(src, dest)
 		if err != nil {
@@ -445,7 +446,7 @@ func (tnl *WSTunnel) onServerUDPData(msg []byte) error {
 		}
 
 		ustub = newUstub(tnl, conn)
-		tnl.cache.addReverseUstubs(ustub)
+		tnl.cache.add(ustub)
 		go ustub.proxy()
 
 		log.Infof("onServerUDPData, new UDPConn src %s dest %s for reverse proxy", src.String(), dest.String())

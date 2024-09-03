@@ -157,6 +157,9 @@ func (mgr *Mgr) NewUDP4(id *stack.TransportEndpointID) (meta.UDPConn, error) {
 		Port: id.LocalPort,
 	}
 
+	// reuse address
+	ep.SocketOptions().SetReuseAddress(true)
+
 	// bind to a 'non-local' address/port
 	err = ep.Bind(fullAddr)
 	if err != nil {

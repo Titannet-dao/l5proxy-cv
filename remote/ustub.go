@@ -73,7 +73,7 @@ func (u *Ustub) proxy() {
 	for {
 		n, err := conn.Read(buf)
 		if err != nil {
-			log.Infof("Read error %s,UDPConn %s %s was close", err.Error(), u.srcAddress().String(), u.destAddress().String())
+			log.Infof("Read error %s, UDPConn %s %s was close", err.Error(), u.srcAddress().String(), u.destAddress().String())
 			break
 		}
 
