@@ -13,7 +13,9 @@ type Config struct {
 }
 
 type Server struct {
-	URL string `toml:"url"`
+	URL      string `toml:"url"`
+	UUID     string `toml:"uuid"`
+	Endpiont string `toml:"endpoint"`
 }
 
 type Tun struct {

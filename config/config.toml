@@ -1,5 +1,7 @@
 [server]
 url = ""
+uid = ""
+endpointid= ""
 
 [tun]
 count= 1

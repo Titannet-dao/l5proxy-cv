@@ -39,7 +39,8 @@ func (xy *XY) Startup(fd int, mtu uint32, cfg *config.Config) error {
 		return fmt.Errorf("xy has startup")
 	}
 
-	remoteCfg := &remote.MgrConfig{WebsocketURL: cfg.Server.URL, TunnelCount: cfg.Tun.Count, TunnelCap: cfg.Tun.Cap}
+	websocketURL := fmt.Sprintf("%s?uuid=%s&endpoint=%s", cfg.Server.URL, cfg.Server.UUID, cfg.Server.Endpiont)
+	remoteCfg := &remote.MgrConfig{WebsocketURL: websocketURL, TunnelCount: cfg.Tun.Count, TunnelCap: cfg.Tun.Cap}
 	remote := remote.NewMgr(remoteCfg)
 
 	localCfg := &local.LocalConfig{
