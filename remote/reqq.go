@@ -51,6 +51,26 @@ func (q *Reqq) alloc(conn meta.TCPConn) (*Req, error) {
 	return req, nil
 }
 
+func (q *Reqq) allocForReverseProxy(idx, tag uint16) (*Req, error) {
+	q.l.Lock()
+	defer q.l.Unlock()
+
+	if idx >= uint16(len(q.array)) {
+		return nil, fmt.Errorf("get, idx %d >= len %d", idx, uint16(len(q.array)))
+	}
+
+	req := q.array[idx]
+
+	if req.isUsed {
+		return nil, fmt.Errorf("get, req %d:%d is in used", idx, tag)
+	}
+
+	req.isUsed = true
+	req.tag = tag
+
+	return req, nil
+}
+
 func (q *Reqq) free(idx uint16, tag uint16) error {
 	if idx >= uint16(len(q.array)) {
 		return fmt.Errorf("free, idx %d >= len %d", idx, uint16(len(q.array)))

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"lproxy_tun/meta"
 	"net"
+	"os"
 	"sync"
 	"syscall"
 	"time"
@@ -299,6 +300,9 @@ func (tnl *WSTunnel) processReqMsg(msg []byte) {
 		tnl.onSeverReqHalfClosed(idx, tag)
 	case cMDReqServerClosed:
 		tnl.onServerReqClosed(idx, tag)
+	case cMDReqCreated:
+		tnl.onServerReqCreate(idx, tag, msg[5:])
+
 	}
 }
 
@@ -327,6 +331,61 @@ func (tnl *WSTunnel) onSeverReqHalfClosed(idx, tag uint16) {
 
 func (tnl *WSTunnel) onServerReqClosed(idx, tag uint16) {
 	tnl.freeReq(idx, tag)
+}
+
+func (tnl *WSTunnel) onServerReqCreate(idx, tag uint16, message []byte) {
+	addressType := message[0]
+	var port uint16
+	var domain string
+	switch addressType {
+	case 0: // ipv4
+		domain = fmt.Sprintf("%d.%d.%d.%d", message[1], message[2], message[3], message[4])
+		port = binary.LittleEndian.Uint16(message[5:])
+	case 1: // domain name
+		domainLen := message[1]
+		domain = string(message[2 : 2+domainLen])
+		port = binary.LittleEndian.Uint16(message[(2 + domainLen):])
+	case 2: // ipv6
+		p1 := binary.LittleEndian.Uint16(message[1:])
+		p2 := binary.LittleEndian.Uint16(message[3:])
+		p3 := binary.LittleEndian.Uint16(message[5:])
+		p4 := binary.LittleEndian.Uint16(message[7:])
+		p5 := binary.LittleEndian.Uint16(message[9:])
+		p6 := binary.LittleEndian.Uint16(message[11:])
+		p7 := binary.LittleEndian.Uint16(message[13:])
+		p8 := binary.LittleEndian.Uint16(message[15:])
+
+		domain = fmt.Sprintf("%d:%d:%d:%d:%d:%d:%d:%d", p8, p7, p6, p5, p4, p3, p2, p1)
+		port = binary.LittleEndian.Uint16(message[17:])
+	default:
+		log.Info("onServerReqCreate, not support addressType:", addressType)
+		return
+	}
+
+	req, err := tnl.reqq.allocForReverseProxy(idx, tag)
+	if err != nil {
+		log.Info("onServerReqCreate, alloc req failed:", err)
+		return
+	}
+
+	addr := fmt.Sprintf("%s:%d", domain, port)
+	log.Info("proxy to ", addr)
+
+	srcAddr, err := net.ResolveTCPAddr("tcp", addr)
+	if err != nil {
+		log.Errorf("onServerReqCreate resolveTCPAddr %s failed %s", addr, err.Error())
+		return
+	}
+
+	conn, err := tnl.newTCP(srcAddr)
+	if err != nil {
+		log.Errorf("onServerReqCreate newTCP %s failed %s", addr, err.Error())
+		tnl.onClientTerminate(req.idx, req.tag)
+		return
+	}
+
+	req.conn = conn
+	go req.proxy()
 }
 
 func (tnl *WSTunnel) isValid() bool {
@@ -493,6 +552,29 @@ func (tnl *WSTunnel) newUDP(src, dest *net.UDPAddr) (meta.UDPConn, error) {
 	return newUDP4, nil
 }
 
+func (tnl *WSTunnel) newTCP(src *net.TCPAddr) (meta.TCPConn, error) {
+	if tnl.mgr.localGvisor == nil {
+		return nil, fmt.Errorf("localGvisor == nil")
+	}
+
+	id := &stack.TransportEndpointID{
+		RemotePort: uint16(src.Port),
+	}
+
+	if src.IP.To4() != nil {
+		id.RemoteAddress = tcpip.AddrFromSlice(src.IP.To4())
+	} else {
+		id.RemoteAddress = tcpip.AddrFromSlice(src.IP.To16())
+	}
+
+	newTCP4, err := tnl.mgr.localGvisor.NewTCP4(id)
+	if err != nil {
+		return nil, fmt.Errorf("NewTCP4 failed:%s", err)
+	}
+
+	return newTCP4, nil
+}
+
 func writeAddress(addrss *net.UDPAddr) []byte {
 	// 3 = iptype(1) + port(2)
 	buf := make([]byte, 3+len(addrss.IP))
@@ -532,5 +614,12 @@ func parseAddress(msg []byte) *net.UDPAddr {
 		return &net.UDPAddr{IP: ip, Port: int(port)}
 	}
 
+	return nil
+}
+
+func setSocketMark(fd, mark int) error {
+	if err := syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_MARK, mark); err != nil {
+		return os.NewSyscallError("failed to set mark", err)
+	}
 	return nil
 }

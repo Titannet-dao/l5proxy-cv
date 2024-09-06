@@ -1,23 +1,27 @@
 package local
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"lproxy_tun/meta"
+	"net"
+	"time"
 
 	"golang.org/x/sys/unix"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
 	"gvisor.dev/gvisor/pkg/tcpip/network/ipv4"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
-	"gvisor.dev/gvisor/pkg/tcpip/transport/tcp"
 	"gvisor.dev/gvisor/pkg/tcpip/transport/udp"
 	"gvisor.dev/gvisor/pkg/waiter"
 
 	log "github.com/sirupsen/logrus"
+	"gvisor.dev/gvisor/pkg/tcpip/link/tun"
 )
 
 type LocalConfig struct {
-	FD               int
+	TunName          string
 	MTU              uint32
 	TransportHandler meta.TransportHandler
 
@@ -42,6 +46,19 @@ func NewMgr(cfg *LocalConfig) *Mgr {
 	return mgr
 }
 
+func openTun(name string) (int, error) {
+	if len(name) >= unix.IFNAMSIZ {
+		return -1, fmt.Errorf("interface name too long: %s", name)
+	}
+
+	fd, err := tun.Open(name)
+	if err != nil {
+		return -1, fmt.Errorf("create tun: %w", err)
+	}
+
+	return fd, nil
+}
+
 func (mgr *Mgr) Startup() error {
 	log.Info("local.Mgr Startup called")
 
@@ -49,7 +66,12 @@ func (mgr *Mgr) Startup() error {
 		return fmt.Errorf("local.Mgr already startup")
 	}
 
-	tun, err := newTUN(mgr.cfg.FD, mgr.cfg.MTU)
+	fd, err := openTun(mgr.cfg.TunName)
+	if err != nil {
+		return err
+	}
+
+	tun, err := newTUN(fd, mgr.cfg.MTU)
 	if err != nil {
 		return err
 	}
@@ -77,7 +99,7 @@ func (mgr *Mgr) Shutdown() error {
 	}
 
 	// LinkEndPoint must close first
-	_ = unix.Close(mgr.cfg.FD)
+	_ = unix.Close(mgr.tun.fd)
 
 	// lingh: Wait() will hang up forever, it seems like a bug in gVisor's stack
 	// wait all goroutines to stop
@@ -119,22 +141,35 @@ func (mgr *Mgr) createStack() (*stack.Stack, error) {
 }
 
 func (mgr *Mgr) NewTCP4(id *stack.TransportEndpointID) (meta.TCPConn, error) {
-	var (
-		wq waiter.Queue
-	)
-
-	transport := mgr.stack.TransportProtocolInstance(tcp.ProtocolNumber)
-	ep, err := transport.NewEndpoint(ipv4.ProtocolNumber, &wq)
+	localIP, err := mgr.GetTunIP()
 	if err != nil {
-		return nil, fmt.Errorf("local.Mgr NewTCP4 NewEndpoint failed:%s", err)
+		return nil, err
 	}
 
-	// TODO: bind to non-local address/port
+	log.Infof("bind local ip %#v", localIP)
 
-	// TODO: connect to remote address/port
+	localAddr := tcpip.FullAddress{
+		Addr: tcpip.AddrFromSlice(localIP),
+		Port: 0,
+	}
+
+	remoteAddr := tcpip.FullAddress{
+		Addr: id.RemoteAddress,
+		Port: id.RemotePort,
+	}
+
+	// ep.Connect(remoteAddr)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	tconn, terr := gonet.DialTCPWithBind(ctx, mgr.stack, localAddr, remoteAddr, ipv4.ProtocolNumber)
+	if terr != nil {
+		// ep.Close()
+		return nil, fmt.Errorf("local.Mgr NewTCP4: DialTCP failed:%s", terr.Error())
+	}
 
 	conn := &tcpConn{
-		TCPConn: gonet.NewTCPConn(&wq, ep),
+		TCPConn: tconn, //gonet.NewTCPConn(&wq, ep),
 		id:      *id,
 	}
 
@@ -176,4 +211,28 @@ func (mgr *Mgr) NewUDP4(id *stack.TransportEndpointID) (meta.UDPConn, error) {
 	}
 
 	return conn, nil
+}
+
+func (mgr *Mgr) GetTunIP() (net.IP, error) {
+	ief, err := net.InterfaceByName(mgr.cfg.TunName)
+	if err != nil {
+		return nil, err
+	}
+
+	addrs, err := ief.Addrs()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, addr := range addrs { // get ipv4 address
+		if addr.(*net.IPNet).IP.To4() != nil {
+			ipnet := addr.(*net.IPNet)
+			mask := ipnet.Mask
+			ip := ipnet.IP.Mask(mask)
+			ip[len(ip)-1] += 1
+
+			return ip, nil
+		}
+	}
+	return nil, errors.New(fmt.Sprintf("interface %s don't have an ipv4 address\n", mgr.cfg.TunName))
 }
