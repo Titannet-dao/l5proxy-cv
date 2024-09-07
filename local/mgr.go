@@ -2,10 +2,8 @@ package local
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"lproxy_tun/meta"
-	"net"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -17,11 +15,10 @@ import (
 	"gvisor.dev/gvisor/pkg/waiter"
 
 	log "github.com/sirupsen/logrus"
-	"gvisor.dev/gvisor/pkg/tcpip/link/tun"
 )
 
 type LocalConfig struct {
-	TunName          string
+	FD               int
 	MTU              uint32
 	TransportHandler meta.TransportHandler
 
@@ -46,32 +43,13 @@ func NewMgr(cfg *LocalConfig) *Mgr {
 	return mgr
 }
 
-func openTun(name string) (int, error) {
-	if len(name) >= unix.IFNAMSIZ {
-		return -1, fmt.Errorf("interface name too long: %s", name)
-	}
-
-	fd, err := tun.Open(name)
-	if err != nil {
-		return -1, fmt.Errorf("create tun: %w", err)
-	}
-
-	return fd, nil
-}
-
 func (mgr *Mgr) Startup() error {
 	log.Info("local.Mgr Startup called")
 
 	if mgr.stack != nil {
 		return fmt.Errorf("local.Mgr already startup")
 	}
-
-	fd, err := openTun(mgr.cfg.TunName)
-	if err != nil {
-		return err
-	}
-
-	tun, err := newTUN(fd, mgr.cfg.MTU)
+	tun, err := newTUN(mgr.cfg.FD, mgr.cfg.MTU)
 	if err != nil {
 		return err
 	}
@@ -99,7 +77,7 @@ func (mgr *Mgr) Shutdown() error {
 	}
 
 	// LinkEndPoint must close first
-	_ = unix.Close(mgr.tun.fd)
+	_ = unix.Close(mgr.cfg.FD)
 
 	// lingh: Wait() will hang up forever, it seems like a bug in gVisor's stack
 	// wait all goroutines to stop
@@ -141,16 +119,9 @@ func (mgr *Mgr) createStack() (*stack.Stack, error) {
 }
 
 func (mgr *Mgr) NewTCP4(id *stack.TransportEndpointID) (meta.TCPConn, error) {
-	localIP, err := mgr.GetTunIP()
-	if err != nil {
-		return nil, err
-	}
-
-	log.Infof("bind local ip %#v", localIP)
-
 	localAddr := tcpip.FullAddress{
-		Addr: tcpip.AddrFromSlice(localIP),
-		Port: 0,
+		Addr: id.LocalAddress,
+		Port: id.LocalPort,
 	}
 
 	remoteAddr := tcpip.FullAddress{
@@ -158,7 +129,6 @@ func (mgr *Mgr) NewTCP4(id *stack.TransportEndpointID) (meta.TCPConn, error) {
 		Port: id.RemotePort,
 	}
 
-	// ep.Connect(remoteAddr)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -211,28 +181,4 @@ func (mgr *Mgr) NewUDP4(id *stack.TransportEndpointID) (meta.UDPConn, error) {
 	}
 
 	return conn, nil
-}
-
-func (mgr *Mgr) GetTunIP() (net.IP, error) {
-	ief, err := net.InterfaceByName(mgr.cfg.TunName)
-	if err != nil {
-		return nil, err
-	}
-
-	addrs, err := ief.Addrs()
-	if err != nil {
-		return nil, err
-	}
-
-	for _, addr := range addrs { // get ipv4 address
-		if addr.(*net.IPNet).IP.To4() != nil {
-			ipnet := addr.(*net.IPNet)
-			mask := ipnet.Mask
-			ip := ipnet.IP.Mask(mask)
-			ip[len(ip)-1] += 1
-
-			return ip, nil
-		}
-	}
-	return nil, errors.New(fmt.Sprintf("interface %s don't have an ipv4 address\n", mgr.cfg.TunName))
 }

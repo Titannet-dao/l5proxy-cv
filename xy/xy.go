@@ -32,7 +32,7 @@ func Singleton() *XY {
 	return singleton
 }
 
-func (xy *XY) Startup(tunName string, mtu uint32, cfg *config.Config) error {
+func (xy *XY) Startup(fd int, mtu uint32, cfg *config.Config) error {
 	xy.lock.Lock()
 	defer xy.lock.Unlock()
 
@@ -43,18 +43,18 @@ func (xy *XY) Startup(tunName string, mtu uint32, cfg *config.Config) error {
 
 	websocketURL := fmt.Sprintf("%s?uuid=%s&endpoint=%s", cfg.Server.URL, cfg.Server.UUID, cfg.Server.Endpiont)
 
+	mark := 0x02
 	protector := func(fd uint64) {
-		setSocketMark(int(fd), 0x01)
+		setSocketMark(int(fd), mark)
 	}
 
-	remoteCfg := &remote.MgrConfig{WebsocketURL: websocketURL, TunnelCount: cfg.Tun.Count, TunnelCap: cfg.Tun.Cap, Protector: protector}
+	remoteCfg := &remote.MgrConfig{WebsocketURL: websocketURL, TunnelCount: cfg.Tunnel.Count, TunnelCap: cfg.Tunnel.Cap, Protector: protector}
 	remote := remote.NewMgr(remoteCfg)
 
 	localCfg := &local.LocalConfig{
 		TransportHandler: remote,
-		TunName:          tunName,
-		// FD:               fd,
-		MTU: mtu,
+		FD:               fd,
+		MTU:              mtu,
 	}
 
 	local := local.NewMgr(localCfg)

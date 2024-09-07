@@ -3,6 +3,6 @@ url = ""
 uid = ""
 endpointid= ""
 
-[tun]
+[tunnel]
 count= 1
 cap = 100

@@ -334,33 +334,14 @@ func (tnl *WSTunnel) onServerReqClosed(idx, tag uint16) {
 }
 
 func (tnl *WSTunnel) onServerReqCreate(idx, tag uint16, message []byte) {
-	addressType := message[0]
-	var port uint16
-	var domain string
-	switch addressType {
-	case 0: // ipv4
-		domain = fmt.Sprintf("%d.%d.%d.%d", message[1], message[2], message[3], message[4])
-		port = binary.LittleEndian.Uint16(message[5:])
-	case 1: // domain name
-		domainLen := message[1]
-		domain = string(message[2 : 2+domainLen])
-		port = binary.LittleEndian.Uint16(message[(2 + domainLen):])
-	case 2: // ipv6
-		p1 := binary.LittleEndian.Uint16(message[1:])
-		p2 := binary.LittleEndian.Uint16(message[3:])
-		p3 := binary.LittleEndian.Uint16(message[5:])
-		p4 := binary.LittleEndian.Uint16(message[7:])
-		p5 := binary.LittleEndian.Uint16(message[9:])
-		p6 := binary.LittleEndian.Uint16(message[11:])
-		p7 := binary.LittleEndian.Uint16(message[13:])
-		p8 := binary.LittleEndian.Uint16(message[15:])
+	src := parseTCPAddrss(message[0:])
 
-		domain = fmt.Sprintf("%d:%d:%d:%d:%d:%d:%d:%d", p8, p7, p6, p5, p4, p3, p2, p1)
-		port = binary.LittleEndian.Uint16(message[17:])
-	default:
-		log.Info("onServerReqCreate, not support addressType:", addressType)
-		return
+	srciplen := net.IPv6len
+	if src.IP.To4() != nil {
+		srciplen = net.IPv4len
 	}
+
+	dest := parseTCPAddrss(message[3+srciplen:])
 
 	req, err := tnl.reqq.allocForReverseProxy(idx, tag)
 	if err != nil {
@@ -368,18 +349,17 @@ func (tnl *WSTunnel) onServerReqCreate(idx, tag uint16, message []byte) {
 		return
 	}
 
-	addr := fmt.Sprintf("%s:%d", domain, port)
-	log.Info("proxy to ", addr)
+	log.Info("tcp proxy to ", src.String())
 
-	srcAddr, err := net.ResolveTCPAddr("tcp", addr)
+	srcAddr, err := net.ResolveTCPAddr("tcp", src.String())
 	if err != nil {
-		log.Errorf("onServerReqCreate resolveTCPAddr %s failed %s", addr, err.Error())
+		log.Errorf("onServerReqCreate resolveTCPAddr %s failed %s", src.String(), err.Error())
 		return
 	}
 
-	conn, err := tnl.newTCP(srcAddr)
+	conn, err := tnl.newTCP(srcAddr, dest)
 	if err != nil {
-		log.Errorf("onServerReqCreate newTCP %s failed %s", addr, err.Error())
+		log.Errorf("onServerReqCreate newTCP %s failed %s", src.String(), err.Error())
 		tnl.onClientTerminate(req.idx, req.tag)
 		return
 	}
@@ -491,8 +471,19 @@ func (tnl *WSTunnel) acceptUDPConn(conn meta.UDPConn) error {
 }
 
 func (tnl *WSTunnel) onServerUDPData(msg []byte) error {
-	src := parseAddress(msg[1:])
-	dest := parseAddress(msg[1+3+len(src.IP):])
+	src := parseUDPAddrss(msg[1:])
+
+	srcipLen := net.IPv6len
+	if src.IP.To4() != nil {
+		srcipLen = net.IPv4len
+	}
+
+	dest := parseUDPAddrss(msg[1+3+srcipLen:])
+
+	destipLen := net.IPv6len
+	if dest.IP.To4() != nil {
+		destipLen = net.IPv4len
+	}
 
 	log.Debugf("onServerUDPData src %s dest %s", src.String(), dest.String())
 
@@ -512,14 +503,14 @@ func (tnl *WSTunnel) onServerUDPData(msg []byte) error {
 	}
 
 	// 7 = cmd + ipType1 + port1 + ipType2 + port2
-	skip := 7 + len(src.IP) + len(dest.IP)
+	skip := 7 + srcipLen + destipLen
 	return ustub.writeTo(msg[skip:], src)
 }
 
 func (tnl *WSTunnel) onClientUDPData(msg []byte, src, dest *net.UDPAddr) error {
 	log.Debugf("onClientUDPData src %s, dest %s", src, dest)
-	srcAddrBuf := writeAddress(src)
-	destAddrBuf := writeAddress(dest)
+	srcAddrBuf := writeUDPAddress(src)
+	destAddrBuf := writeUDPAddress(dest)
 
 	buf := make([]byte, 1+len(srcAddrBuf)+len(destAddrBuf)+len(msg))
 
@@ -552,19 +543,26 @@ func (tnl *WSTunnel) newUDP(src, dest *net.UDPAddr) (meta.UDPConn, error) {
 	return newUDP4, nil
 }
 
-func (tnl *WSTunnel) newTCP(src *net.TCPAddr) (meta.TCPConn, error) {
+func (tnl *WSTunnel) newTCP(src *net.TCPAddr, dest *net.TCPAddr) (meta.TCPConn, error) {
 	if tnl.mgr.localGvisor == nil {
 		return nil, fmt.Errorf("localGvisor == nil")
 	}
 
 	id := &stack.TransportEndpointID{
 		RemotePort: uint16(src.Port),
+		LocalPort:  uint16(dest.Port),
 	}
 
 	if src.IP.To4() != nil {
 		id.RemoteAddress = tcpip.AddrFromSlice(src.IP.To4())
 	} else {
 		id.RemoteAddress = tcpip.AddrFromSlice(src.IP.To16())
+	}
+
+	if dest.IP.To4() != nil {
+		id.LocalAddress = tcpip.AddrFromSlice(dest.IP.To4())
+	} else {
+		id.LocalAddress = tcpip.AddrFromSlice(dest.IP.To16())
 	}
 
 	newTCP4, err := tnl.mgr.localGvisor.NewTCP4(id)
@@ -575,7 +573,7 @@ func (tnl *WSTunnel) newTCP(src *net.TCPAddr) (meta.TCPConn, error) {
 	return newTCP4, nil
 }
 
-func writeAddress(addrss *net.UDPAddr) []byte {
+func writeUDPAddress(addrss *net.UDPAddr) []byte {
 	// 3 = iptype(1) + port(2)
 	buf := make([]byte, 3+len(addrss.IP))
 	// add port
@@ -593,7 +591,17 @@ func writeAddress(addrss *net.UDPAddr) []byte {
 	return buf
 }
 
-func parseAddress(msg []byte) *net.UDPAddr {
+func parseTCPAddrss(msg []byte) *net.TCPAddr {
+	addr := parseAddress("tcp", msg)
+	return addr.(*net.TCPAddr)
+}
+
+func parseUDPAddrss(msg []byte) *net.UDPAddr {
+	addr := parseAddress("udp", msg)
+	return addr.(*net.UDPAddr)
+}
+
+func parseAddress(network string, msg []byte) net.Addr {
 	offset := 0
 	port := binary.LittleEndian.Uint16(msg[offset:])
 	offset += 2
@@ -601,19 +609,26 @@ func parseAddress(msg []byte) *net.UDPAddr {
 	ipType := msg[offset]
 	offset += 1
 
+	var ip []byte = nil
 	switch ipType {
 	case 0:
 		// ipv4
-		ip := make([]byte, 4)
-		copy(ip, msg[offset:offset+4])
-		return &net.UDPAddr{IP: ip, Port: int(port)}
+		ip = make([]byte, net.IPv4len)
+		copy(ip, msg[offset:offset+net.IPv4len])
 	case 2:
 		// ipv6
-		ip := make([]byte, 16)
-		copy(ip, msg[offset:offset+16])
-		return &net.UDPAddr{IP: ip, Port: int(port)}
+		ip = make([]byte, net.IPv6len)
+		copy(ip, msg[offset:offset+net.IPv6len])
 	}
 
+	switch network {
+	case "tcp":
+		return &net.TCPAddr{IP: ip, Port: int(port)}
+	case "udp":
+		return &net.UDPAddr{IP: ip, Port: int(port)}
+	default:
+		log.Fatalf("network %s not support", network)
+	}
 	return nil
 }
 

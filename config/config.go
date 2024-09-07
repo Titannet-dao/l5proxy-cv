@@ -9,7 +9,7 @@ import (
 // Config represents the structure of the TOML file
 type Config struct {
 	Server Server `toml:"server"`
-	Tun    Tun    `toml:"tun"`
+	Tunnel Tunnel `toml:"tunnel"`
 }
 
 type Server struct {
@@ -18,7 +18,7 @@ type Server struct {
 	Endpiont string `toml:"endpoint"`
 }
 
-type Tun struct {
+type Tunnel struct {
 	Count int `toml:"count"`
 	Cap   int `toml:"cap"`
 }
