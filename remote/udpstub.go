@@ -2,40 +2,40 @@ package remote
 
 import (
 	"fmt"
-	"lproxy_tun/meta"
+	"l5proxy_cv/meta"
 	"net"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 )
 
-type Ustub struct {
+type UdpStub struct {
 	tnl         *WSTunnel
 	conn        meta.UDPConn
 	lastActvity time.Time
 }
 
-func newUstub(tnl *WSTunnel, conn meta.UDPConn) *Ustub {
-	ustub := &Ustub{tnl: tnl, conn: conn}
+func newUdpStub(tnl *WSTunnel, conn meta.UDPConn) *UdpStub {
+	ustub := &UdpStub{tnl: tnl, conn: conn}
 	return ustub
 }
 
-func (u *Ustub) srcAddress() *net.UDPAddr {
+func (u *UdpStub) srcAddress() *net.UDPAddr {
 	conn := u.conn
 	address := &net.UDPAddr{Port: int(conn.ID().RemotePort), IP: conn.ID().RemoteAddress.AsSlice()}
 	return address
 }
 
-func (u *Ustub) destAddress() *net.UDPAddr {
+func (u *UdpStub) dstAddress() *net.UDPAddr {
 	conn := u.conn
 	address := &net.UDPAddr{Port: int(conn.ID().LocalPort), IP: conn.ID().LocalAddress.AsSlice()}
 	return address
 }
 
-func (u *Ustub) writeTo(data []byte, addr net.Addr) error {
+func (u *UdpStub) writeTo(data []byte, addr net.Addr) error {
 	conn := u.conn
 	if conn == nil {
-		return fmt.Errorf("Write udp conn == nil")
+		return fmt.Errorf("write udp conn == nil")
 	}
 
 	u.lastActvity = time.Now()
@@ -57,12 +57,12 @@ func (u *Ustub) writeTo(data []byte, addr net.Addr) error {
 	return nil
 }
 
-func (u *Ustub) onUDPMessage(data []byte) {
+func (u *UdpStub) onUDPMessage(data []byte) {
 	u.lastActvity = time.Now()
-	u.tnl.onClientUDPData(data, u.srcAddress(), u.destAddress())
+	u.tnl.onClientUDPData(data, u.srcAddress(), u.dstAddress())
 }
 
-func (u *Ustub) proxy() {
+func (u *UdpStub) proxy() {
 	conn := u.conn
 	if conn == nil {
 		log.Error("conn == nil")
@@ -73,12 +73,12 @@ func (u *Ustub) proxy() {
 	for {
 		n, err := conn.Read(buf)
 		if err != nil {
-			log.Infof("Read error %s, UDPConn %s %s was close", err.Error(), u.srcAddress().String(), u.destAddress().String())
+			log.Debugf("Read error %s, UDPConn %s %s was close", err.Error(), u.srcAddress().String(), u.dstAddress().String())
 			break
 		}
 
 		if n == 0 {
-			log.Error("UDP read n==0")
+			log.Debug("UDP read n==0")
 			break
 		}
 
@@ -87,6 +87,6 @@ func (u *Ustub) proxy() {
 	}
 }
 
-func (u *Ustub) close() {
+func (u *UdpStub) close() {
 	u.conn.Close()
 }

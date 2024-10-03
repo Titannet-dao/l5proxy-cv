@@ -2,7 +2,8 @@ package remote
 
 import (
 	"fmt"
-	"lproxy_tun/meta"
+	"l5proxy_cv/meta"
+	"net/url"
 	"sync/atomic"
 	"time"
 
@@ -25,6 +26,8 @@ type Mgr struct {
 	isActivated bool
 
 	localGvisor meta.LocalGivsorNetwork
+
+	dnsResolver *AlibbResolver0
 }
 
 func NewMgr(config *MgrConfig) *Mgr {
@@ -41,8 +44,18 @@ func NewMgr(config *MgrConfig) *Mgr {
 		cfg.TunnelCap = 100
 	}
 
+	var host string
+	url, err := url.Parse(cfg.WebsocketURL)
+	if err != nil {
+		log.Errorf("NewMgr parse URL failed:%s", err)
+		host = "127.0.0.1"
+	} else {
+		host = url.Host
+	}
+
 	mgr := &Mgr{
-		config: cfg,
+		config:      cfg,
+		dnsResolver: newAlibbResolver(host, config.Protector),
 	}
 
 	return mgr
@@ -63,7 +76,7 @@ func (mgr *Mgr) Startup() error {
 
 	mgr.tunnels = make([]*WSTunnel, 0, config.TunnelCount)
 	for i := 0; i < config.TunnelCount; i++ {
-		tnl := newTunnel(config.WebsocketURL, config.TunnelCap)
+		tnl := newTunnel(mgr.dnsResolver, config.WebsocketURL, config.TunnelCap)
 		if config.Protector != nil {
 			tnl.protector = config.Protector
 		}

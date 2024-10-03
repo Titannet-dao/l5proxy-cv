@@ -2,9 +2,9 @@ package xy
 
 import (
 	"fmt"
-	"lproxy_tun/config"
-	"lproxy_tun/local"
-	"lproxy_tun/remote"
+	"l5proxy_cv/config"
+	"l5proxy_cv/local"
+	"l5proxy_cv/remote"
 	"os"
 	"sync"
 	"syscall"
@@ -43,12 +43,16 @@ func (xy *XY) Startup(fd int, mtu uint32, cfg *config.Config) error {
 
 	websocketURL := fmt.Sprintf("%s?uuid=%s&endpoint=%s", cfg.Server.URL, cfg.Server.UUID, cfg.Server.Endpiont)
 
-	mark := 0x02
-	protector := func(fd uint64) {
-		setSocketMark(int(fd), mark)
+	mark := 0x22 // 34
+	var protector func(fd uint64)
+	if cfg.Server.Mark > 0 {
+		protector = func(fd uint64) {
+			setSocketMark(int(fd), mark)
+		}
 	}
 
-	remoteCfg := &remote.MgrConfig{WebsocketURL: websocketURL, TunnelCount: cfg.Tunnel.Count, TunnelCap: cfg.Tunnel.Cap, Protector: protector}
+	remoteCfg := &remote.MgrConfig{WebsocketURL: websocketURL, TunnelCount: cfg.Tunnel.Count,
+		TunnelCap: cfg.Tunnel.Cap, Protector: protector}
 	remote := remote.NewMgr(remoteCfg)
 
 	localCfg := &local.LocalConfig{
@@ -110,6 +114,7 @@ func (xy *XY) QueryState() string {
 
 func setSocketMark(fd, mark int) error {
 	if err := syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_MARK, mark); err != nil {
+		log.Errorf("failed to set socket mark:%s", err)
 		return os.NewSyscallError("failed to set mark", err)
 	}
 	return nil

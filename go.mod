@@ -1,4 +1,4 @@
-module lproxy_tun
+module l5proxy_cv
 
 go 1.22.1
 
@@ -10,11 +10,16 @@ require (
 )
 
 require (
-	github.com/BurntSushi/toml v1.4.0 // indirect
 	github.com/google/btree v1.1.2 // indirect
+	github.com/miekg/dns v1.1.62
+	golang.org/x/mod v0.18.0 // indirect
+	golang.org/x/net v0.27.0 // indirect
+	golang.org/x/sync v0.7.0 // indirect
+	golang.org/x/tools v0.22.0 // indirect
 )
 
 require (
+	github.com/BurntSushi/toml v1.4.0
 	github.com/gorilla/websocket v1.5.3
-	golang.org/x/sys v0.21.0
+	golang.org/x/sys v0.22.0
 )

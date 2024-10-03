@@ -3,10 +3,11 @@ package main
 import (
 	"flag"
 	"fmt"
-	"lproxy_tun/config"
-	"lproxy_tun/xy"
+	"l5proxy_cv/config"
+	"l5proxy_cv/xy"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	log "github.com/sirupsen/logrus"
@@ -40,7 +41,18 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.SetLevel(log.DebugLevel)
+	logLevel := log.InfoLevel
+	switch strings.ToLower(cfg.Log.Level) {
+	case "debug":
+		logLevel = log.DebugLevel
+	case "info":
+		logLevel = log.InfoLevel
+	case "warn":
+		logLevel = log.WarnLevel
+	case "error":
+		logLevel = log.ErrorLevel
+	}
+	log.SetLevel(logLevel)
 
 	fd, err := openTun(tunName)
 	if err != nil {

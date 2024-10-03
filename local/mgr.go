@@ -3,7 +3,7 @@ package local
 import (
 	"context"
 	"fmt"
-	"lproxy_tun/meta"
+	"l5proxy_cv/meta"
 	"time"
 
 	"golang.org/x/sys/unix"

@@ -2,7 +2,7 @@ package remote
 
 import (
 	"fmt"
-	"lproxy_tun/meta"
+	"l5proxy_cv/meta"
 	"sync"
 )
 
@@ -82,11 +82,11 @@ func (q *Reqq) free(idx uint16, tag uint16) error {
 	req := q.array[idx]
 
 	if !req.isUsed {
-		return fmt.Errorf("free, req %d:%d is in not used", idx, tag)
+		return fmt.Errorf("free, req %d:%d is not in used", idx, tag)
 	}
 
 	if req.tag != tag {
-		return fmt.Errorf("free, req %d:%d is in not match tag %d", idx, tag, req.tag)
+		return fmt.Errorf("free, req %d:%d is not match tag %d", idx, tag, req.tag)
 	}
 
 	// log.Printf("reqq free req %d:%d", idx, tag)

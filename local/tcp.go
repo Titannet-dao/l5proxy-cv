@@ -3,7 +3,7 @@ package local
 // base on:
 // https://github.com/xjasonlyu/tun2socks/blob/main/core/tcp.go
 import (
-	"lproxy_tun/meta"
+	"l5proxy_cv/meta"
 	"time"
 
 	glog "gvisor.dev/gvisor/pkg/log"

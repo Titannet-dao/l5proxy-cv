@@ -1,9 +1,14 @@
 package remote
 
 import (
-	"lproxy_tun/meta"
+	"l5proxy_cv/meta"
+	"time"
 
 	log "github.com/sirupsen/logrus"
+)
+
+const (
+	tcpSocketWriteDeadline = 5
 )
 
 type Req struct {
@@ -40,6 +45,7 @@ func (r *Req) onServerData(data []byte) error {
 		wrote := 0
 		l := len(data)
 		for {
+			conn.SetWriteDeadline(time.Now().Add(tcpSocketWriteDeadline * time.Second))
 			n, err := conn.Write(data[wrote:])
 			if err != nil {
 				return err

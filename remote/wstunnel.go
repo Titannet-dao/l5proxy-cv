@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"lproxy_tun/meta"
+	"l5proxy_cv/meta"
 	"net"
-	"os"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -20,6 +20,8 @@ import (
 const (
 	readBufSize  = 16 * 1024
 	writeBufSize = 16 * 1024
+
+	websocketWriteDealine = 5
 )
 
 const (
@@ -49,14 +51,17 @@ type WSTunnel struct {
 	ws       *websocket.Conn
 	waitping int
 
-	cache *Cache
+	cache *UdpCache
 	mgr   *Mgr
+
+	dnsResolver *AlibbResolver0
 }
 
-func newTunnel(websocketURL string, reqCap int) *WSTunnel {
+func newTunnel(dnsResolver *AlibbResolver0, websocketURL string, reqCap int) *WSTunnel {
 	wst := &WSTunnel{
+		dnsResolver:  dnsResolver,
 		websocketURL: websocketURL,
-		cache:        newCache(),
+		cache:        newUdpCache(),
 	}
 
 	reqq := newReqq(reqCap, wst)
@@ -108,7 +113,7 @@ func (tnl *WSTunnel) serveWebsocket() {
 	failedConnect := 0
 	for tnl.isActivated {
 		// connect
-		conn, err := tnl.dail()
+		conn, err := tnl.dial()
 		if err != nil {
 			log.Errorf("dial %s, %s", tnl.websocketURL, err.Error())
 			failedConnect++
@@ -166,8 +171,10 @@ func (tnl *WSTunnel) onDisconnected() {
 	tnl.wsLock.Lock()
 	defer tnl.wsLock.Unlock()
 
-	tnl.ws.Close()
-	tnl.ws = nil
+	if tnl.ws != nil {
+		tnl.ws.Close()
+		tnl.ws = nil
+	}
 }
 
 func (tnl *WSTunnel) keepalive() {
@@ -192,6 +199,7 @@ func (tnl *WSTunnel) keepalive() {
 		return
 	}
 
+	conn.SetWriteDeadline(time.Now().Add(websocketWriteDealine * time.Second))
 	err := conn.WriteMessage(websocket.PingMessage, data)
 	if err != nil {
 		log.Errorf("websocket send PingMessage error:%v", err)
@@ -213,6 +221,7 @@ func (tnl *WSTunnel) sendPong(data []byte) {
 	tnl.wsLock.Lock()
 	defer tnl.wsLock.Unlock()
 
+	conn.SetWriteDeadline(time.Now().Add(websocketWriteDealine * time.Second))
 	err := conn.WriteMessage(websocket.PongMessage, data)
 	if err != nil {
 		log.Errorf("websocket send PongMessage error:%v", err)
@@ -236,21 +245,44 @@ func (tnl *WSTunnel) send(data []byte) {
 	tnl.wsLock.Lock()
 	defer tnl.wsLock.Unlock()
 
+	conn.SetWriteDeadline(time.Now().Add(websocketWriteDealine * time.Second))
 	err := conn.WriteMessage(websocket.BinaryMessage, data)
 	if err != nil {
 		log.Errorf("websocket WriteMessage error:%v", err)
 	}
 }
 
-func (tnl *WSTunnel) dail() (*websocket.Conn, error) {
+func (tnl *WSTunnel) dial() (*websocket.Conn, error) {
 	d := websocket.Dialer{
 		ReadBufferSize:   readBufSize,
 		WriteBufferSize:  writeBufSize,
 		HandshakeTimeout: 5 * time.Second,
 		NetDialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			var d *net.Dialer
+			var hostString, portString string
+			if strings.Contains(addr, ":") {
+				ss := strings.Split(addr, ":")
+				hostString = ss[0]
+				portString = ss[1]
+			} else {
+				hostString = addr
+				portString = ""
+			}
+
+			ip, err := tnl.dnsResolver.getHostIP(hostString)
+			if err != nil {
+				return nil, err
+			}
+
+			var addr2 string
+			if len(portString) > 0 {
+				addr2 = fmt.Sprintf("%s:%s", ip.String(), portString)
+			} else {
+				addr2 = ip.String()
+			}
+
+			var d2 *net.Dialer
 			if tnl.protector != nil {
-				d = &net.Dialer{
+				d2 = &net.Dialer{
 					Control: func(network, address string, c syscall.RawConn) error {
 						c.Control(func(fd uintptr) {
 							tnl.protector(uint64(fd))
@@ -259,10 +291,10 @@ func (tnl *WSTunnel) dail() (*websocket.Conn, error) {
 					},
 				}
 			} else {
-				d = &net.Dialer{}
+				d2 = &net.Dialer{}
 			}
 
-			return d.DialContext(ctx, network, addr)
+			return d2.DialContext(ctx, network, addr2)
 		},
 	}
 
@@ -341,7 +373,7 @@ func (tnl *WSTunnel) onServerReqCreate(idx, tag uint16, message []byte) {
 		srciplen = net.IPv4len
 	}
 
-	dest := parseTCPAddrss(message[3+srciplen:])
+	dst := parseTCPAddrss(message[3+srciplen:])
 
 	req, err := tnl.reqq.allocForReverseProxy(idx, tag)
 	if err != nil {
@@ -357,7 +389,7 @@ func (tnl *WSTunnel) onServerReqCreate(idx, tag uint16, message []byte) {
 		return
 	}
 
-	conn, err := tnl.newTCP(srcAddr, dest)
+	conn, err := tnl.newTCP(srcAddr, dst)
 	if err != nil {
 		log.Errorf("onServerReqCreate newTCP %s failed %s", src.String(), err.Error())
 		tnl.onClientTerminate(req.idx, req.tag)
@@ -413,7 +445,7 @@ func (tnl *WSTunnel) onClientReqData(idx uint16, tag uint16, data []byte) {
 func (tnl *WSTunnel) onClientCreate(conn meta.TCPConn, idx, tag uint16) {
 	addr := conn.ID().LocalAddress
 	port := conn.ID().LocalPort
-	log.Infof("local address %s local port %d", addr, port)
+	log.Debugf("onClientCreate, local address %s local port %d", addr, port)
 
 	iplen := addr.Len()
 
@@ -454,16 +486,16 @@ func (tnl *WSTunnel) acceptTCPConn(conn meta.TCPConn) error {
 
 func (tnl *WSTunnel) acceptUDPConn(conn meta.UDPConn) error {
 	src := &net.UDPAddr{Port: int(conn.ID().RemotePort), IP: conn.ID().RemoteAddress.AsSlice()}
-	dest := &net.UDPAddr{Port: int(conn.ID().LocalPort), IP: conn.ID().LocalAddress.AsSlice()}
+	dst := &net.UDPAddr{Port: int(conn.ID().LocalPort), IP: conn.ID().LocalAddress.AsSlice()}
 
-	log.Infof("acceptUDPConn src %s dest %s", src.String(), dest.String())
+	log.Infof("acceptUDPConn src %s dst %s", src.String(), dst.String())
 
-	ustub := tnl.cache.get(src, dest)
+	ustub := tnl.cache.get(src, dst)
 	if ustub != nil {
-		return fmt.Errorf("conn src %s dest %s already exist", src.String(), dest.String())
+		return fmt.Errorf("conn src %s dst %s already exist", src.String(), dst.String())
 	}
 
-	ustub = newUstub(tnl, conn)
+	ustub = newUdpStub(tnl, conn)
 	tnl.cache.add(ustub)
 	go ustub.proxy()
 
@@ -478,59 +510,59 @@ func (tnl *WSTunnel) onServerUDPData(msg []byte) error {
 		srcipLen = net.IPv4len
 	}
 
-	dest := parseUDPAddrss(msg[1+3+srcipLen:])
+	dst := parseUDPAddrss(msg[1+3+srcipLen:])
 
-	destipLen := net.IPv6len
-	if dest.IP.To4() != nil {
-		destipLen = net.IPv4len
+	dstipLen := net.IPv6len
+	if dst.IP.To4() != nil {
+		dstipLen = net.IPv4len
 	}
 
-	log.Debugf("onServerUDPData src %s dest %s", src.String(), dest.String())
+	log.Debugf("onServerUDPData src %s dst %s", src.String(), dst.String())
 
-	ustub := tnl.cache.get(src, dest)
+	ustub := tnl.cache.get(src, dst)
 	if ustub == nil {
-		conn, err := tnl.newUDP(src, dest)
+		conn, err := tnl.newUDP(src, dst)
 		if err != nil {
-			log.Errorf("onServerUDPData new UDPConn src %s dest %s failed, %s", src.String(), dest.String(), err.Error())
+			log.Errorf("onServerUDPData new UDPConn src %s dst %s failed, %s", src.String(), dst.String(), err.Error())
 			return nil
 		}
 
-		ustub = newUstub(tnl, conn)
+		ustub = newUdpStub(tnl, conn)
 		tnl.cache.add(ustub)
 		go ustub.proxy()
 
-		log.Infof("onServerUDPData, new UDPConn src %s dest %s for reverse proxy", src.String(), dest.String())
+		log.Infof("onServerUDPData, new UDPConn src %s dst %s for reverse proxy", src.String(), dst.String())
 	}
 
 	// 7 = cmd + ipType1 + port1 + ipType2 + port2
-	skip := 7 + srcipLen + destipLen
+	skip := 7 + srcipLen + dstipLen
 	return ustub.writeTo(msg[skip:], src)
 }
 
-func (tnl *WSTunnel) onClientUDPData(msg []byte, src, dest *net.UDPAddr) error {
-	log.Debugf("onClientUDPData src %s, dest %s", src, dest)
+func (tnl *WSTunnel) onClientUDPData(msg []byte, src, dst *net.UDPAddr) error {
+	log.Debugf("onClientUDPData src %s, dst %s", src, dst)
 	srcAddrBuf := writeUDPAddress(src)
-	destAddrBuf := writeUDPAddress(dest)
+	dstAddrBuf := writeUDPAddress(dst)
 
-	buf := make([]byte, 1+len(srcAddrBuf)+len(destAddrBuf)+len(msg))
+	buf := make([]byte, 1+len(srcAddrBuf)+len(dstAddrBuf)+len(msg))
 
 	buf[0] = byte(cMDUDPReq)
 	copy(buf[1:], srcAddrBuf)
-	copy(buf[1+len(srcAddrBuf):], destAddrBuf)
-	copy(buf[1+len(srcAddrBuf)+len(destAddrBuf):], msg)
+	copy(buf[1+len(srcAddrBuf):], dstAddrBuf)
+	copy(buf[1+len(srcAddrBuf)+len(dstAddrBuf):], msg)
 
 	tnl.send(buf)
 	return nil
 }
 
-func (tnl *WSTunnel) newUDP(src, dest *net.UDPAddr) (meta.UDPConn, error) {
+func (tnl *WSTunnel) newUDP(src, dst *net.UDPAddr) (meta.UDPConn, error) {
 	if tnl.mgr.localGvisor == nil {
 		return nil, fmt.Errorf("localGvisor == nil")
 	}
 
 	id := &stack.TransportEndpointID{
-		LocalPort:     uint16(dest.Port),
-		LocalAddress:  tcpip.AddrFromSlice(dest.IP),
+		LocalPort:     uint16(dst.Port),
+		LocalAddress:  tcpip.AddrFromSlice(dst.IP),
 		RemotePort:    uint16(src.Port),
 		RemoteAddress: tcpip.AddrFromSlice(src.IP),
 	}
@@ -543,14 +575,14 @@ func (tnl *WSTunnel) newUDP(src, dest *net.UDPAddr) (meta.UDPConn, error) {
 	return newUDP4, nil
 }
 
-func (tnl *WSTunnel) newTCP(src *net.TCPAddr, dest *net.TCPAddr) (meta.TCPConn, error) {
+func (tnl *WSTunnel) newTCP(src *net.TCPAddr, dst *net.TCPAddr) (meta.TCPConn, error) {
 	if tnl.mgr.localGvisor == nil {
 		return nil, fmt.Errorf("localGvisor == nil")
 	}
 
 	id := &stack.TransportEndpointID{
 		RemotePort: uint16(src.Port),
-		LocalPort:  uint16(dest.Port),
+		LocalPort:  uint16(dst.Port),
 	}
 
 	if src.IP.To4() != nil {
@@ -559,10 +591,10 @@ func (tnl *WSTunnel) newTCP(src *net.TCPAddr, dest *net.TCPAddr) (meta.TCPConn, 
 		id.RemoteAddress = tcpip.AddrFromSlice(src.IP.To16())
 	}
 
-	if dest.IP.To4() != nil {
-		id.LocalAddress = tcpip.AddrFromSlice(dest.IP.To4())
+	if dst.IP.To4() != nil {
+		id.LocalAddress = tcpip.AddrFromSlice(dst.IP.To4())
 	} else {
-		id.LocalAddress = tcpip.AddrFromSlice(dest.IP.To16())
+		id.LocalAddress = tcpip.AddrFromSlice(dst.IP.To16())
 	}
 
 	newTCP4, err := tnl.mgr.localGvisor.NewTCP4(id)
@@ -632,9 +664,9 @@ func parseAddress(network string, msg []byte) net.Addr {
 	return nil
 }
 
-func setSocketMark(fd, mark int) error {
-	if err := syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_MARK, mark); err != nil {
-		return os.NewSyscallError("failed to set mark", err)
-	}
-	return nil
-}
+// func setSocketMark(fd, mark int) error {
+// 	if err := syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_MARK, mark); err != nil {
+// 		return os.NewSyscallError("failed to set mark", err)
+// 	}
+// 	return nil
+// }

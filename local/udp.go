@@ -3,7 +3,7 @@ package local
 // base on:
 // https://github.com/xjasonlyu/tun2socks/blob/main/core/udp.go
 import (
-	"lproxy_tun/meta"
+	"l5proxy_cv/meta"
 
 	log "github.com/sirupsen/logrus"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
