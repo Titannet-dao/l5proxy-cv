@@ -101,8 +101,8 @@ func (tnl *WSTunnel) stop() {
 func (tnl *WSTunnel) serveWebsocket() {
 	delayfn := func(eCount int) {
 		tick := 3 * eCount
-		if tick > 15 {
-			tick = 15
+		if tick > 30 {
+			tick = 30
 		} else if tick < 3 {
 			tick = 3
 		}
@@ -113,17 +113,19 @@ func (tnl *WSTunnel) serveWebsocket() {
 	failedConnect := 0
 	for tnl.isActivated {
 		// connect
+		if failedConnect > 0 {
+			delayfn(failedConnect)
+		}
+
 		conn, err := tnl.dial()
+		failedConnect++
+
 		if err != nil {
 			log.Errorf("dial %s, %s", tnl.websocketURL, err.Error())
-			failedConnect++
-			delayfn(failedConnect)
 			continue
 		}
 
 		tnl.onConnected(conn)
-
-		failedConnect = 0
 
 		// read
 		for {
@@ -132,10 +134,16 @@ func (tnl *WSTunnel) serveWebsocket() {
 				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 					log.Errorf("websocket ReadMessage error: %v", err)
 				}
+				log.Errorf("tunnel ws ReadMessage failed %s", err.Error())
 				break
 			}
 
 			tnl.processWebsocketMsg(message)
+
+			// reset failedConnect
+			if failedConnect > 0 {
+				failedConnect = 0
+			}
 		}
 
 		tnl.onDisconnected()
