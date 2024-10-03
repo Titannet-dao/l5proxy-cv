@@ -42,7 +42,7 @@ func main() {
 	}
 
 	logLevel := log.InfoLevel
-	switch strings.ToLower(cfg.Log.Level) {
+	switch strings.ToLower(cfg.Server.LogLevel) {
 	case "debug":
 		logLevel = log.DebugLevel
 	case "info":

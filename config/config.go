@@ -10,7 +10,6 @@ import (
 type Config struct {
 	Server Server `toml:"server"`
 	Tunnel Tunnel `toml:"tunnel"`
-	Log    Log    `toml:"log"`
 }
 
 type Server struct {
@@ -18,6 +17,7 @@ type Server struct {
 	UUID     string `toml:"uuid"`
 	Endpiont string `toml:"endpoint"`
 	Mark     int    `toml:"mark"`
+	LogLevel string `toml:"loglevel"`
 }
 
 type Tunnel struct {
@@ -25,13 +25,9 @@ type Tunnel struct {
 	Cap   int `toml:"cap"`
 }
 
-type Log struct {
-	Level string `toml:"level"`
-}
-
 func ParseConfig(filePath string) (*Config, error) {
 	if len(filePath) == 0 {
-		return nil, fmt.Errorf("config file path can not empty")
+		return nil, fmt.Errorf("Config file path can not empty")
 	}
 	var config Config
 
