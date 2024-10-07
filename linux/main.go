@@ -31,9 +31,7 @@ func openTun(name string) (int, error) {
 func main() {
 	// for debug
 	var configFile string
-	var tunName string
 	flag.StringVar(&configFile, "c", "", "Config file path")
-	flag.StringVar(&tunName, "tun", "tun0xy", "tun name")
 	flag.Parse()
 
 	cfg, err := config.ParseConfig(configFile)
@@ -54,6 +52,7 @@ func main() {
 	}
 	log.SetLevel(logLevel)
 
+	var tunName = cfg.Server.Tun
 	fd, err := openTun(tunName)
 	if err != nil {
 		log.Fatal(err)
