@@ -1,4 +1,4 @@
-package local
+package localtun
 
 // base on:
 // https://github.com/xjasonlyu/tun2socks/blob/main/core/option/option.go

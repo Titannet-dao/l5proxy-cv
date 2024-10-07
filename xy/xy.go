@@ -3,7 +3,7 @@ package xy
 import (
 	"fmt"
 	"l5proxy_cv/config"
-	"l5proxy_cv/local"
+	localtun "l5proxy_cv/local/tun"
 	"l5proxy_cv/remote"
 	"os"
 	"sync"
@@ -20,7 +20,7 @@ var (
 type XY struct {
 	lock sync.Mutex
 
-	local  *local.Mgr
+	local  *localtun.Mgr
 	remote *remote.Mgr
 }
 
@@ -55,13 +55,13 @@ func (xy *XY) Startup(fd int, mtu uint32, cfg *config.Config) error {
 		TunnelCap: cfg.Tunnel.Cap, Protector: protector}
 	remote := remote.NewMgr(remoteCfg)
 
-	localCfg := &local.LocalConfig{
+	localCfg := &localtun.LocalConfig{
 		TransportHandler: remote,
 		FD:               fd,
 		MTU:              mtu,
 	}
 
-	local := local.NewMgr(localCfg)
+	local := localtun.NewMgr(localCfg)
 
 	err := remote.Startup()
 	if err != nil {
