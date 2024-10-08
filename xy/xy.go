@@ -36,7 +36,6 @@ func (xy *XY) Startup(cfg *config.Config) error {
 	xy.lock.Lock()
 	defer xy.lock.Unlock()
 
-	log.Info("xy.Startup called")
 	if xy.locals != nil {
 		return fmt.Errorf("xy has startup")
 	}
@@ -60,7 +59,7 @@ func (xy *XY) Startup(cfg *config.Config) error {
 	if cfg.TunMode.Enabled {
 		l, err := xy.newTunMode(cfg, remote)
 		if err != nil {
-
+			log.Errorf("xy.Startup newTunMode failed:%s", err)
 		} else {
 			locals = append(locals, l)
 		}
@@ -99,7 +98,7 @@ func (xy *XY) Startup(cfg *config.Config) error {
 	xy.locals = locals
 	xy.remote = remote
 
-	log.Info("xy.Startup completed")
+	log.Info("xy.Startup")
 	return nil
 }
 

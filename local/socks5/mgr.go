@@ -73,6 +73,8 @@ func (mgr *Mgr) Shutdown() error {
 	if err != nil {
 		log.Errorf("localsocks5.Mgr shutdown TCP server failed:%s", err)
 	}
+
+	log.Info("Socks5 server shutdown")
 	return nil
 }
 

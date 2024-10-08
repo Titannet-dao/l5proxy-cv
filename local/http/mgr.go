@@ -214,6 +214,8 @@ func (mgr *Mgr) Shutdown() error {
 		log.Errorf("localhttp.Mgr shutdown http server failed:%s", err)
 	}
 
+	log.Info("HTTP server shutdown")
+
 	return nil
 }
 
