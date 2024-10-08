@@ -79,6 +79,10 @@ func (q *Reqq) free(idx uint16, tag uint16) error {
 	q.l.Lock()
 	defer q.l.Unlock()
 
+	return q.freeInternal(idx, tag)
+}
+
+func (q *Reqq) freeInternal(idx uint16, tag uint16) error {
 	req := q.array[idx]
 
 	if !req.isUsed {
@@ -127,7 +131,7 @@ func (q *Reqq) cleanup() {
 
 	for _, r := range q.array {
 		if r.isUsed {
-			q.free(r.idx, r.tag)
+			_ = q.freeInternal(r.idx, r.tag)
 		}
 	}
 }
