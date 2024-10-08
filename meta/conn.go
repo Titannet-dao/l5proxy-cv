@@ -54,4 +54,5 @@ type HTTPSocks5TransportHandler interface {
 type Local interface {
 	Startup() error
 	Shutdown() error
+	Name() string
 }

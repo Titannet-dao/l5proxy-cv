@@ -96,7 +96,7 @@ func (xy *XY) Startup(cfg *config.Config) error {
 	for _, local := range locals {
 		err = local.Startup()
 		if err != nil {
-			log.Errorf("local startup failed:%v", err)
+			log.Errorf("local %s startup failed:%v", local.Name(), err)
 		}
 	}
 
@@ -121,7 +121,7 @@ func (xy *XY) Shutdown() error {
 	for _, local := range xy.locals {
 		err = local.Shutdown()
 		if err != nil {
-			log.Errorf("local shutdown failed:%v", err)
+			log.Errorf("local %s shutdown failed:%v", local.Name(), err)
 		}
 	}
 

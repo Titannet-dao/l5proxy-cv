@@ -181,6 +181,10 @@ func NewMgr(cfg *LocalConfig) meta.Local {
 	return mgr
 }
 
+func (mgr *Mgr) Name() string {
+	return "httpmode"
+}
+
 func (mgr *Mgr) Startup() error {
 	if mgr.server != nil {
 		return fmt.Errorf("localhttp.Mgr already startup")

@@ -38,6 +38,10 @@ func NewMgr(cfg *LocalConfig) meta.Local {
 	return mgr
 }
 
+func (mgr *Mgr) Name() string {
+	return "socks5mode"
+}
+
 func (mgr *Mgr) Startup() error {
 	if mgr.listener != nil {
 		return fmt.Errorf("localsocks5.Mgr already startup")

@@ -43,6 +43,10 @@ func NewMgr(cfg *LocalConfig) meta.Local {
 	return mgr
 }
 
+func (mgr *Mgr) Name() string {
+	return "tunmode"
+}
+
 func (mgr *Mgr) Startup() error {
 	log.Info("localtun.Mgr Startup called")
 
