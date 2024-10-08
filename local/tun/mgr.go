@@ -18,8 +18,10 @@ import (
 )
 
 type LocalConfig struct {
-	FD               int
-	MTU              uint32
+	FD     int
+	MTU    uint32
+	Device string
+
 	TransportHandler meta.TunTransportHandler
 
 	TCPModerateReceiveBuffer bool
@@ -48,8 +50,6 @@ func (mgr *Mgr) Name() string {
 }
 
 func (mgr *Mgr) Startup() error {
-	log.Info("localtun.Mgr Startup called")
-
 	if mgr.stack != nil {
 		return fmt.Errorf("localtun.Mgr already startup")
 	}
@@ -69,7 +69,7 @@ func (mgr *Mgr) Startup() error {
 
 	mgr.cfg.TransportHandler.OnStackReady(mgr)
 
-	log.Info("localtun.Mgr Startup completed")
+	log.Infof("Tun server Startup, tun device:%s", mgr.cfg.Device)
 	return nil
 }
 

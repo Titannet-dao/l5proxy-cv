@@ -195,6 +195,8 @@ func (mgr *Mgr) Startup() error {
 	}
 
 	mgr.server = &http.Server{Addr: mgr.cfg.Address, Handler: mgr.defaultHandler}
+	log.Infof("HTTP server startup, address:%s", mgr.cfg.Address)
+
 	go mgr.serveHTTP()
 
 	return nil

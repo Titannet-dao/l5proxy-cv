@@ -58,6 +58,7 @@ func (mgr *Mgr) Startup() error {
 		return fmt.Errorf("localsocks5.Mgr ListenTCP error:%s", err)
 	}
 
+	log.Infof("Socks5 server startup, address:%s", mgr.cfg.Address)
 	go mgr.serveSocks5()
 
 	return nil

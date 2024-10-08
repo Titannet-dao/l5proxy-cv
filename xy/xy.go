@@ -65,6 +65,8 @@ func (xy *XY) Startup(cfg *config.Config) error {
 			TransportHandler: remote,
 			FD:               cfg.TunMode.FD,
 			MTU:              cfg.TunMode.MTU,
+
+			Device: cfg.TunMode.Device,
 		}
 
 		locals = append(locals, localtun.NewMgr(localCfg))
