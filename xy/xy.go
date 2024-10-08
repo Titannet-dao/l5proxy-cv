@@ -5,12 +5,9 @@ import (
 	"l5proxy_cv/config"
 	localhttp "l5proxy_cv/local/http"
 	localsocks5 "l5proxy_cv/local/socks5"
-	localtun "l5proxy_cv/local/tun"
 	"l5proxy_cv/meta"
 	"l5proxy_cv/remote"
-	"os"
 	"sync"
-	"syscall"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -61,15 +58,12 @@ func (xy *XY) Startup(cfg *config.Config) error {
 	var locals []meta.Local
 
 	if cfg.TunMode.Enabled {
-		localCfg := &localtun.LocalConfig{
-			TransportHandler: remote,
-			FD:               cfg.TunMode.FD,
-			MTU:              cfg.TunMode.MTU,
+		l, err := xy.newTunMode(cfg, remote)
+		if err != nil {
 
-			Device: cfg.TunMode.Device,
+		} else {
+			locals = append(locals, l)
 		}
-
-		locals = append(locals, localtun.NewMgr(localCfg))
 	}
 
 	if cfg.HTTPMode.Enabled {
@@ -142,12 +136,4 @@ func (xy *XY) Shutdown() error {
 func (xy *XY) QueryState() string {
 	// TODO: query full state
 	return "not implemented yet"
-}
-
-func setSocketMark(fd, mark int) error {
-	if err := syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_MARK, mark); err != nil {
-		log.Errorf("failed to set socket mark:%s", err)
-		return os.NewSyscallError("failed to set mark", err)
-	}
-	return nil
 }

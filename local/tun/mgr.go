@@ -6,7 +6,6 @@ import (
 	"l5proxy_cv/meta"
 	"time"
 
-	"golang.org/x/sys/unix"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
 	"gvisor.dev/gvisor/pkg/tcpip/network/ipv4"
@@ -69,7 +68,7 @@ func (mgr *Mgr) Startup() error {
 
 	mgr.cfg.TransportHandler.OnStackReady(mgr)
 
-	log.Infof("Tun server Startup, tun device:%s", mgr.cfg.Device)
+	log.Infof("Tun server startup, tun device:%s", mgr.cfg.Device)
 	return nil
 }
 
@@ -81,7 +80,7 @@ func (mgr *Mgr) Shutdown() error {
 	}
 
 	// LinkEndPoint must close first
-	_ = unix.Close(mgr.cfg.FD)
+	tunclose(mgr.cfg.FD)
 
 	// lingh: Wait() will hang up forever, it seems like a bug in gVisor's stack
 	// wait all goroutines to stop
