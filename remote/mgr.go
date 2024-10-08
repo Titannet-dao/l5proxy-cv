@@ -160,6 +160,30 @@ func (mgr *Mgr) HandleTCP(conn meta.TCPConn) {
 	handled = true
 }
 
+func (mgr *Mgr) HandleHttpSocks5TCP(conn meta.TCPConn, target *meta.HTTPSocksTargetAddress) {
+	handled := false
+	defer func() {
+		if !handled {
+			conn.Close()
+		}
+	}()
+
+	// allocate a usable tunnel
+	tunnel, err := mgr.allocateWSTunnel()
+	if err != nil {
+		log.Errorf("mgr.allocateWSTunnel failed: %v", err)
+		return
+	}
+
+	err = tunnel.acceptHttpSocks5TCPConn(conn, target)
+	if err != nil {
+		log.Errorf("tunnel.acceptTCPConn failed: %v", err)
+		return
+	}
+
+	handled = true
+}
+
 func (mgr *Mgr) HandleUDP(conn meta.UDPConn) {
 	handled := false
 	defer func() {

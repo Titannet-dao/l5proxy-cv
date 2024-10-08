@@ -25,9 +25,9 @@ type UDPConn interface {
 	ID() *stack.TransportEndpointID
 }
 
-// TransportHandler is a TCP/UDP connection handler that implements
+// TunTransportHandler is a TCP/UDP connection handler that implements
 // HandleTCP and HandleUDP methods.
-type TransportHandler interface {
+type TunTransportHandler interface {
 	HandleTCP(TCPConn)
 	HandleUDP(UDPConn)
 
@@ -38,4 +38,20 @@ type TransportHandler interface {
 type LocalGivsorNetwork interface {
 	NewTCP4(id *stack.TransportEndpointID) (TCPConn, error)
 	NewUDP4(id *stack.TransportEndpointID) (UDPConn, error)
+}
+
+type HTTPSocksTargetAddress struct {
+	DomainName string
+	Port       int
+
+	ExtraBytes []byte
+}
+
+type HTTPSocks5TransportHandler interface {
+	HandleHttpSocks5TCP(TCPConn, *HTTPSocksTargetAddress)
+}
+
+type Local interface {
+	Startup() error
+	Shutdown() error
 }

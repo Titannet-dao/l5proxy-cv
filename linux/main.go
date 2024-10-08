@@ -52,13 +52,17 @@ func main() {
 	}
 	log.SetLevel(logLevel)
 
-	var tunName = cfg.Server.Tun
-	fd, err := openTun(tunName)
-	if err != nil {
-		log.Fatal(err)
+	if cfg.TunMode.Enabled {
+		var tunName = cfg.TunMode.Device
+		fd, err := openTun(tunName)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		cfg.TunMode.FD = fd
 	}
 
-	err = xy.Singleton().Startup(fd, 1500, cfg)
+	err = xy.Singleton().Startup(cfg)
 	if err != nil {
 		log.Fatal(err)
 	}

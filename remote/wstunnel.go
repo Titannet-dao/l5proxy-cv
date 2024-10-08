@@ -349,20 +349,20 @@ func (tnl *WSTunnel) processReqMsg(msg []byte) {
 func (tnl *WSTunnel) onServerReqData(idx, tag uint16, msg []byte) {
 	req, err := tnl.reqq.get(idx, tag)
 	if err != nil {
-		log.Errorf("WSTunnel.onServerReqData error:%v", err)
+		log.Debugf("WSTunnel.onServerReqData error:%v", err)
 		return
 	}
 
 	err = req.onServerData(msg)
 	if err != nil {
-		log.Errorf("WSTunnel.onServerReqData call req.onServerData error:%v", err)
+		log.Debugf("WSTunnel.onServerReqData call req.onServerData error:%v", err)
 	}
 }
 
 func (tnl *WSTunnel) onSeverReqHalfClosed(idx, tag uint16) {
 	req, err := tnl.reqq.get(idx, tag)
 	if err != nil {
-		log.Errorf("WSTunnel.onServerReqData error:%v", err)
+		log.Debugf("WSTunnel.onServerReqData error:%v", err)
 		return
 	}
 
@@ -426,7 +426,7 @@ func (tnl *WSTunnel) onClientTerminate(idx uint16, tag uint16) {
 func (tnl *WSTunnel) freeReq(idx, tag uint16) {
 	err := tnl.reqq.free(idx, tag)
 	if err != nil {
-		log.Errorf("WSTunnel.freeReq, get req failed:%v", err)
+		log.Debugf("WSTunnel.freeReq, get req failed:%v", err)
 		return
 	}
 }
@@ -450,17 +450,30 @@ func (tnl *WSTunnel) onClientReqData(idx uint16, tag uint16, data []byte) {
 	tnl.send(buf)
 }
 
-func (tnl *WSTunnel) onClientCreate(conn meta.TCPConn, idx, tag uint16) {
-	addr := conn.ID().LocalAddress
-	port := conn.ID().LocalPort
-	log.Debugf("onClientCreate, local address %s local port %d", addr, port)
+func (tnl *WSTunnel) acceptTCPConn(conn meta.TCPConn) error {
+	req, err := tnl.reqq.alloc(conn)
+	if err != nil {
+		return err
+	}
+
+	tnl.onClientCreateByID(conn.ID(), req)
+
+	// start a new goroutine to read data from 'conn'
+	go req.proxy()
+
+	return nil
+}
+
+func (tnl *WSTunnel) onClientCreateByID(id *stack.TransportEndpointID, req *Req) {
+	addr := id.LocalAddress
+	port := id.LocalPort
 
 	iplen := addr.Len()
 
 	buf := make([]byte, 8+iplen)
 	buf[0] = cMDReqCreated
-	binary.LittleEndian.PutUint16(buf[1:], idx)
-	binary.LittleEndian.PutUint16(buf[3:], tag)
+	binary.LittleEndian.PutUint16(buf[1:], req.idx)
+	binary.LittleEndian.PutUint16(buf[3:], req.tag)
 
 	if iplen > 4 {
 		// ipv6
@@ -478,18 +491,40 @@ func (tnl *WSTunnel) onClientCreate(conn meta.TCPConn, idx, tag uint16) {
 	tnl.send(buf)
 }
 
-func (tnl *WSTunnel) acceptTCPConn(conn meta.TCPConn) error {
+func (tnl *WSTunnel) acceptHttpSocks5TCPConn(conn meta.TCPConn, target *meta.HTTPSocksTargetAddress) error {
 	req, err := tnl.reqq.alloc(conn)
 	if err != nil {
 		return err
 	}
 
-	tnl.onClientCreate(conn, req.idx, req.tag)
+	tnl.onClientCreateByDomain(req, target)
 
-	// start a new goroutine to read data from 'conn'
-	go req.proxy()
+	if len(target.ExtraBytes) > 0 {
+		// send extra data
+		tnl.onClientReqData(req.idx, req.tag, target.ExtraBytes)
+	}
+
+	// read data from 'conn'
+	// NOTE: we need not to start a new goroutine here
+	req.proxy()
 
 	return nil
+}
+
+func (tnl *WSTunnel) onClientCreateByDomain(req *Req, target *meta.HTTPSocksTargetAddress) {
+	domainLen := len(target.DomainName)
+
+	buf := make([]byte, 9+domainLen)
+	buf[0] = cMDReqCreated
+	binary.LittleEndian.PutUint16(buf[1:], req.idx)
+	binary.LittleEndian.PutUint16(buf[3:], req.tag)
+
+	buf[5] = 1 // domain type
+	buf[6] = byte(domainLen)
+	copy(buf[7:], []byte(target.DomainName))
+	binary.LittleEndian.PutUint16(buf[7+domainLen:], uint16(target.Port))
+
+	tnl.send(buf)
 }
 
 func (tnl *WSTunnel) acceptUDPConn(conn meta.UDPConn) error {

@@ -10,6 +10,10 @@ import (
 type Config struct {
 	Server Server `toml:"server"`
 	Tunnel Tunnel `toml:"tunnel"`
+
+	HTTPMode   HTTPMode   `toml:"http"`
+	Socks5Mode Socks5Mode `toml:"socks5"`
+	TunMode    TunMode    `toml:"tun"`
 }
 
 type Server struct {
@@ -17,13 +21,29 @@ type Server struct {
 	UUID     string `toml:"uuid"`
 	Endpiont string `toml:"endpoint"`
 	Mark     int    `toml:"mark"`
-	Tun      string `toml:"tun"`
 	LogLevel string `toml:"loglevel"`
 }
 
 type Tunnel struct {
 	Count int `toml:"count"`
 	Cap   int `toml:"cap"`
+}
+
+type HTTPMode struct {
+	Enabled bool   `toml:"enabled"`
+	Address string `toml:"address"`
+}
+
+type Socks5Mode struct {
+	Enabled bool   `toml:"enabled"`
+	Address string `toml:"address"`
+}
+
+type TunMode struct {
+	Enabled bool   `toml:"enabled"`
+	Device  string `toml:"dev"`
+	MTU     uint32 `toml:"mtu"`
+	FD      int
 }
 
 func ParseConfig(filePath string) (*Config, error) {
@@ -45,8 +65,14 @@ func ParseConfig(filePath string) (*Config, error) {
 		return nil, fmt.Errorf("Config must have a websocket URL")
 	}
 
-	if config.Server.Tun == "" {
-		config.Server.Tun = "tun0xy"
+	if config.TunMode.Enabled {
+		if config.TunMode.Device == "" {
+			config.TunMode.Device = "tun0xy"
+		}
+
+		if config.TunMode.MTU == 0 {
+			config.TunMode.MTU = 1500
+		}
 	}
 
 	if config.Tunnel.Cap > 200 {

@@ -23,7 +23,7 @@ type StackConfig struct {
 
 	// TransportHandler is the handler used by internal
 	// stack to set transport handlers.
-	TransportHandler meta.TransportHandler
+	TransportHandler meta.TunTransportHandler
 
 	// MulticastGroups is used by internal stack to add
 	// nic to given groups.

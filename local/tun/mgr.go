@@ -20,7 +20,7 @@ import (
 type LocalConfig struct {
 	FD               int
 	MTU              uint32
-	TransportHandler meta.TransportHandler
+	TransportHandler meta.TunTransportHandler
 
 	TCPModerateReceiveBuffer bool
 	TCPSendBufferSize        int
@@ -34,7 +34,7 @@ type Mgr struct {
 	stack *stack.Stack
 }
 
-func NewMgr(cfg *LocalConfig) *Mgr {
+func NewMgr(cfg *LocalConfig) meta.Local {
 	mgr := &Mgr{
 		cfg:   *cfg,
 		stack: nil,
@@ -44,10 +44,10 @@ func NewMgr(cfg *LocalConfig) *Mgr {
 }
 
 func (mgr *Mgr) Startup() error {
-	log.Info("local.Mgr Startup called")
+	log.Info("localtun.Mgr Startup called")
 
 	if mgr.stack != nil {
-		return fmt.Errorf("local.Mgr already startup")
+		return fmt.Errorf("localtun.Mgr already startup")
 	}
 	tun, err := newTUN(mgr.cfg.FD, mgr.cfg.MTU)
 	if err != nil {
@@ -65,15 +65,15 @@ func (mgr *Mgr) Startup() error {
 
 	mgr.cfg.TransportHandler.OnStackReady(mgr)
 
-	log.Info("local.Mgr Startup completed")
+	log.Info("localtun.Mgr Startup completed")
 	return nil
 }
 
 func (mgr *Mgr) Shutdown() error {
-	log.Info("local.Mgr shutdown called")
+	log.Info("localtun.Mgr shutdown called")
 
 	if mgr.stack == nil {
-		return fmt.Errorf("local.Mgr isn't running")
+		return fmt.Errorf("localtun.Mgr isn't running")
 	}
 
 	// LinkEndPoint must close first
@@ -86,15 +86,15 @@ func (mgr *Mgr) Shutdown() error {
 	// close all transport endpoints
 	mgr.stack.Close()
 	// wait all goroutines to stop
-	log.Info("local.Mgr waiting stack goroutines to stop")
+	log.Info("localtun.Mgr waiting stack goroutines to stop")
 	mgr.stack.Wait()
 
-	log.Info("local.Mgr shutdown completed")
+	log.Info("localtun.Mgr shutdown completed")
 	return nil
 }
 
 func (mgr *Mgr) createStack() (*stack.Stack, error) {
-	log.Info("local.Mgr createStack: new gVisor network stack")
+	log.Info("localtun.Mgr createStack: new gVisor network stack")
 
 	var opts []Option
 	if mgr.cfg.TCPModerateReceiveBuffer {
@@ -135,7 +135,7 @@ func (mgr *Mgr) NewTCP4(id *stack.TransportEndpointID) (meta.TCPConn, error) {
 	tconn, terr := gonet.DialTCPWithBind(ctx, mgr.stack, localAddr, remoteAddr, ipv4.ProtocolNumber)
 	if terr != nil {
 		// ep.Close()
-		return nil, fmt.Errorf("local.Mgr NewTCP4: DialTCP failed:%s", terr.Error())
+		return nil, fmt.Errorf("localtun.Mgr NewTCP4: DialTCP failed:%s", terr.Error())
 	}
 
 	conn := &tcpConn{
@@ -154,7 +154,7 @@ func (mgr *Mgr) NewUDP4(id *stack.TransportEndpointID) (meta.UDPConn, error) {
 	transport := mgr.stack.TransportProtocolInstance(udp.ProtocolNumber)
 	ep, err := transport.NewEndpoint(ipv4.ProtocolNumber, &wq)
 	if err != nil {
-		return nil, fmt.Errorf("local.Mgr NewUDP4: NewEndpoint failed:%s", err)
+		return nil, fmt.Errorf("localtun.Mgr NewUDP4: NewEndpoint failed:%s", err)
 	}
 
 	fullAddr := tcpip.FullAddress{
@@ -169,7 +169,7 @@ func (mgr *Mgr) NewUDP4(id *stack.TransportEndpointID) (meta.UDPConn, error) {
 	err = ep.Bind(fullAddr)
 	if err != nil {
 		ep.Close()
-		return nil, fmt.Errorf("local.Mgr NewUDP4: Bind UDP failed:%s", err)
+		return nil, fmt.Errorf("localtun.Mgr NewUDP4: Bind UDP failed:%s", err)
 	}
 
 	// lingh: UDP does not connect to specific peer, thus allow it send to many peers
