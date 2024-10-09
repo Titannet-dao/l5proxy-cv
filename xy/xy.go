@@ -61,6 +61,7 @@ func (xy *XY) Startup(cfg *config.Config) error {
 	if cfg.BypassMode.Enabled {
 		localCfg := &localbypass.LocalConfig{
 			WhitelistURL: cfg.BypassMode.WhitelistURL,
+			Protector:    protector,
 		}
 
 		mgr := localbypass.NewMgr(localCfg)

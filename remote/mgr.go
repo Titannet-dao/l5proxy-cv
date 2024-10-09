@@ -3,6 +3,7 @@ package remote
 import (
 	"fmt"
 	"l5proxy_cv/meta"
+	"l5proxy_cv/mydns"
 	"net/url"
 	"sync/atomic"
 	"time"
@@ -27,7 +28,7 @@ type Mgr struct {
 
 	localGvisor meta.LocalGivsorNetwork
 
-	dnsResolver *AlibbResolver0
+	dnsResolver *mydns.AlibbResolver0
 }
 
 func NewMgr(config *MgrConfig) *Mgr {
@@ -55,7 +56,7 @@ func NewMgr(config *MgrConfig) *Mgr {
 
 	mgr := &Mgr{
 		config:      cfg,
-		dnsResolver: newAlibbResolver(host, config.Protector),
+		dnsResolver: mydns.NewAlibbResolver(host, config.Protector),
 	}
 
 	return mgr

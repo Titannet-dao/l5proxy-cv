@@ -1,4 +1,4 @@
-package remote
+package mydns
 
 import (
 	"net"

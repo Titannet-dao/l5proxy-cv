@@ -5,10 +5,9 @@ import (
 	"encoding/binary"
 	"fmt"
 	"l5proxy_cv/meta"
+	"l5proxy_cv/mydns"
 	"net"
-	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -56,10 +55,10 @@ type WSTunnel struct {
 	cache *UdpCache
 	mgr   *Mgr
 
-	dnsResolver *AlibbResolver0
+	dnsResolver *mydns.AlibbResolver0
 }
 
-func newTunnel(id int, dnsResolver *AlibbResolver0, websocketURL string, reqCap int) *WSTunnel {
+func newTunnel(id int, dnsResolver *mydns.AlibbResolver0, websocketURL string, reqCap int) *WSTunnel {
 	wst := &WSTunnel{
 		id:           id,
 		dnsResolver:  dnsResolver,
@@ -273,43 +272,7 @@ func (tnl *WSTunnel) dial() (*websocket.Conn, error) {
 		WriteBufferSize:  writeBufSize,
 		HandshakeTimeout: 5 * time.Second,
 		NetDialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			var hostString, portString string
-			if strings.Contains(addr, ":") {
-				ss := strings.Split(addr, ":")
-				hostString = ss[0]
-				portString = ss[1]
-			} else {
-				hostString = addr
-				portString = ""
-			}
-
-			ip, err := tnl.dnsResolver.getHostIP(hostString)
-			if err != nil {
-				return nil, err
-			}
-
-			var addr2 string
-			if len(portString) > 0 {
-				addr2 = fmt.Sprintf("%s:%s", ip.String(), portString)
-			} else {
-				addr2 = ip.String()
-			}
-
-			var d2 *net.Dialer
-			if tnl.protector != nil {
-				d2 = &net.Dialer{
-					Control: func(network, address string, c syscall.RawConn) error {
-						c.Control(func(fd uintptr) {
-							tnl.protector(uint64(fd))
-						})
-						return nil
-					},
-				}
-			} else {
-				d2 = &net.Dialer{}
-			}
-
-			return d2.DialContext(ctx, network, addr2)
+			return mydns.DialWithProtector(tnl.dnsResolver, tnl.protector, ctx, network, addr)
 		},
 	}
 

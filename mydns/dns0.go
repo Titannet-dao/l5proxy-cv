@@ -1,8 +1,10 @@
-package remote
+package mydns
 
 import (
+	"context"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -24,7 +26,7 @@ type AlibbResolver0 struct {
 	ip         net.IP
 }
 
-func newAlibbResolver(host string, protector func(fd uint64)) *AlibbResolver0 {
+func NewAlibbResolver(host string, protector func(fd uint64)) *AlibbResolver0 {
 	return &AlibbResolver0{
 		host:       host,
 		protector:  protector,
@@ -32,7 +34,7 @@ func newAlibbResolver(host string, protector func(fd uint64)) *AlibbResolver0 {
 	}
 }
 
-func (r *AlibbResolver0) getHostIP(host string) (net.IP, error) {
+func (r *AlibbResolver0) GetHostIP(host string) (net.IP, error) {
 	if host != r.host {
 		return nil, fmt.Errorf("host not match, expected:%s, input:%s", r.host, host)
 	}
@@ -121,4 +123,50 @@ func resolveHost4(host string, protector func(fd uint64), nameServer string) (ne
 	}
 
 	return nil, fmt.Errorf("no A record found in DNS reply")
+}
+
+func DialWithProtector(dnsResolver *AlibbResolver0, protector func(uint64),
+	ctx context.Context, network, addr string) (net.Conn, error) {
+
+	var hostString, portString string
+	if strings.Contains(addr, ":") {
+		ss := strings.Split(addr, ":")
+		hostString = ss[0]
+		portString = ss[1]
+	} else {
+		hostString = addr
+		portString = ""
+	}
+
+	ip, err := dnsResolver.GetHostIP(hostString)
+	if err != nil {
+		return nil, err
+	}
+
+	var addr2 string
+	if len(portString) > 0 {
+		addr2 = fmt.Sprintf("%s:%s", ip.String(), portString)
+	} else {
+		addr2 = ip.String()
+	}
+
+	var d2 *net.Dialer
+	if protector != nil {
+		d2 = &net.Dialer{
+			Control: func(network, address string, c syscall.RawConn) error {
+				c.Control(func(fd uintptr) {
+					protector(uint64(fd))
+				})
+				return nil
+			},
+		}
+	} else {
+		d2 = &net.Dialer{}
+	}
+
+	if ctx != nil {
+		return d2.DialContext(ctx, network, addr2)
+	} else {
+		return d2.Dial(network, addr2)
+	}
 }

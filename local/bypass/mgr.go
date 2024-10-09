@@ -1,13 +1,9 @@
 package localbypass
 
 import (
-	"bufio"
 	"fmt"
-	"io"
 	"l5proxy_cv/meta"
 	"net"
-	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -17,6 +13,8 @@ import (
 
 type LocalConfig struct {
 	WhitelistURL string
+
+	Protector func(fd uint64)
 }
 
 type bypassconn struct {
@@ -32,7 +30,8 @@ type Mgr struct {
 
 	isActivated bool
 
-	whitelist map[string]struct{}
+	whitelistLock sync.Mutex
+	whitelist     map[string]struct{}
 }
 
 func NewMgr(cfg *LocalConfig) meta.Local {
@@ -54,10 +53,7 @@ func (mgr *Mgr) Startup() error {
 		return fmt.Errorf("bypass mode already startup")
 	}
 
-	err := mgr.loadWhitelist()
-	if err != nil {
-		return err
-	}
+	go mgr.loadWhitelist()
 
 	mgr.isActivated = true
 
@@ -73,49 +69,6 @@ func (mgr *Mgr) Shutdown() error {
 	mgr.isActivated = false
 	log.Info("bypass mode shutdown")
 	return nil
-}
-
-func (mgr *Mgr) loadWhitelist() error {
-	rsp, err := http.Get(mgr.cfg.WhitelistURL)
-	if err != nil {
-		return err
-	}
-
-	defer rsp.Body.Close()
-
-	if rsp.StatusCode == http.StatusOK {
-		bodyBytes, err := io.ReadAll(rsp.Body)
-		if err != nil {
-			return err
-		}
-
-		bodyString := string(bodyBytes)
-		reader := bufio.NewReader(strings.NewReader(bodyString))
-		for {
-			linebytes, isPrefix, err := reader.ReadLine()
-			if err != nil {
-				if err == io.EOF {
-					break
-				}
-
-				return err
-			}
-
-			if isPrefix {
-				return fmt.Errorf("loadWhitelist failed, underlying buffer is too small")
-			}
-
-			domain := strings.TrimSpace(string(linebytes))
-			if len(domain) > 0 {
-				mgr.whitelist[domain] = struct{}{}
-			}
-		}
-
-		log.Infof("localbypass.Mgr load whilte domain name count: %d", len(mgr.whitelist))
-		return nil
-	} else {
-		return fmt.Errorf("rsp status code %d != 200", rsp.StatusCode)
-	}
 }
 
 func (mgr *Mgr) HandleHttpSocks5TCP(conn meta.TCPConn, address *meta.HTTPSocksTargetAddress) {
@@ -219,5 +172,8 @@ func (mgr *Mgr) isLocalIP(domainName string) bool {
 }
 
 func (mgr *Mgr) isDomainInWhitelist(domainName string) bool {
+	mgr.whitelistLock.Lock()
+	defer mgr.whitelistLock.Unlock()
+
 	return isDomainIn(domainName, mgr.whitelist)
 }
