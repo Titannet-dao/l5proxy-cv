@@ -75,7 +75,7 @@ func (xy *XY) Startup(cfg *config.Config) error {
 	}
 
 	if cfg.TunMode.Enabled {
-		l, err := xy.newTunMode(cfg, remote)
+		l, err := xy.newTunMode(cfg, remote, bypass)
 		if err != nil {
 			log.Errorf("xy.Startup newTunMode failed:%s", err)
 		} else {
@@ -87,7 +87,7 @@ func (xy *XY) Startup(cfg *config.Config) error {
 		localCfg := &localhttp.LocalConfig{
 			TransportHandler: remote,
 			Address:          cfg.HTTPMode.Address,
-			UseBypass:        cfg.HTTPMode.Enabled && bypass != nil,
+			UseBypass:        cfg.HTTPMode.Bypass && bypass != nil,
 			BypassHandler:    bypass,
 		}
 
@@ -98,7 +98,7 @@ func (xy *XY) Startup(cfg *config.Config) error {
 		localCfg := &localsocks5.LocalConfig{
 			TransportHandler: remote,
 			Address:          cfg.Socks5Mode.Address,
-			UseBypass:        cfg.Socks5Mode.Enabled && bypass != nil,
+			UseBypass:        cfg.Socks5Mode.Bypass && bypass != nil,
 			BypassHandler:    bypass,
 		}
 

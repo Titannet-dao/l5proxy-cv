@@ -23,7 +23,6 @@ func loadWhitelist(dnsResolver *mydns.AlibbResolver0, protector func(uint64), uu
 
 	client := http.Client{Transport: tr}
 
-	// TODO: use mydns
 	rsp, err := client.Get(uurl)
 	if err != nil {
 		return nil, err

@@ -49,6 +49,7 @@ type Socks5Mode struct {
 
 type TunMode struct {
 	Enabled bool   `toml:"enabled"`
+	Bypass  bool   `toml:"bypass"`
 	Device  string `toml:"dev"`
 	MTU     uint32 `toml:"mtu"`
 	FD      int

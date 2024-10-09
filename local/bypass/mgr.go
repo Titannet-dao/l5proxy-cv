@@ -72,12 +72,12 @@ func (mgr *Mgr) Shutdown() error {
 	return nil
 }
 
-func (mgr *Mgr) HandleHttpSocks5TCP(conn meta.TCPConn, address *meta.HTTPSocksTargetAddress) {
+func (mgr *Mgr) HandleHttpSocks5TCP(conn meta.TCPConn, targetInfo *meta.HTTPSocksTargetInfo) {
 	defer conn.Close()
 
 	var addr string
-	if address != nil {
-		addr = fmt.Sprintf("%s:%d", address.DomainName, address.Port)
+	if targetInfo != nil {
+		addr = fmt.Sprintf("%s:%d", targetInfo.DomainName, targetInfo.Port)
 	} else if conn.ID() != nil {
 		// use conn remote address
 		addr = conn.ID().RemoteAddress.String()
@@ -94,15 +94,16 @@ func (mgr *Mgr) HandleHttpSocks5TCP(conn meta.TCPConn, address *meta.HTTPSocksTa
 
 	defer conn2.Close()
 
-	if address != nil && len(address.ExtraBytes) > 0 {
-		n, err := conn2.Write(address.ExtraBytes)
+	if targetInfo != nil && len(targetInfo.ExtraBytes) > 0 {
+		n, err := conn2.Write(targetInfo.ExtraBytes)
 		if err != nil {
 			log.Errorf("localbypass.Mgr write extra bytes to %s failed:%s", addr, err)
 			return
 		}
 
-		if n != len(address.ExtraBytes) {
-			log.Errorf("localbypass.Mgr write extra bytes to %s failed, expected %d, actual %d", addr, len(address.ExtraBytes), n)
+		if n != len(targetInfo.ExtraBytes) {
+			log.Errorf("localbypass.Mgr write extra bytes to %s failed, expected %d, actual %d",
+				addr, len(targetInfo.ExtraBytes), n)
 			return
 		}
 	}

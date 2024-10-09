@@ -428,8 +428,7 @@ func (tnl *WSTunnel) acceptTCPConn(conn meta.TCPConn) error {
 
 	tnl.onClientCreateByID(conn.ID(), req)
 
-	// start a new goroutine to read data from 'conn'
-	go req.proxy()
+	req.proxy()
 
 	return nil
 }
@@ -461,7 +460,7 @@ func (tnl *WSTunnel) onClientCreateByID(id *stack.TransportEndpointID, req *Req)
 	tnl.send(buf)
 }
 
-func (tnl *WSTunnel) acceptHttpSocks5TCPConn(conn meta.TCPConn, target *meta.HTTPSocksTargetAddress) error {
+func (tnl *WSTunnel) acceptHttpSocks5TCPConn(conn meta.TCPConn, target *meta.HTTPSocksTargetInfo) error {
 	req, err := tnl.reqq.alloc(conn)
 	if err != nil {
 		return err
@@ -481,7 +480,7 @@ func (tnl *WSTunnel) acceptHttpSocks5TCPConn(conn meta.TCPConn, target *meta.HTT
 	return nil
 }
 
-func (tnl *WSTunnel) onClientCreateByDomain(req *Req, target *meta.HTTPSocksTargetAddress) {
+func (tnl *WSTunnel) onClientCreateByDomain(req *Req, target *meta.HTTPSocksTargetInfo) {
 	domainLen := len(target.DomainName)
 
 	buf := make([]byte, 9+domainLen)
@@ -510,7 +509,7 @@ func (tnl *WSTunnel) acceptUDPConn(conn meta.UDPConn) error {
 
 	ustub = newUdpStub(tnl, conn)
 	tnl.cache.add(ustub)
-	go ustub.proxy()
+	ustub.proxy()
 
 	return nil
 }

@@ -40,7 +40,7 @@ type LocalGivsorNetwork interface {
 	NewUDP4(id *stack.TransportEndpointID) (UDPConn, error)
 }
 
-type HTTPSocksTargetAddress struct {
+type HTTPSocksTargetInfo struct {
 	DomainName string
 	Port       int
 
@@ -48,7 +48,7 @@ type HTTPSocksTargetAddress struct {
 }
 
 type HTTPSocks5TransportHandler interface {
-	HandleHttpSocks5TCP(TCPConn, *HTTPSocksTargetAddress)
+	HandleHttpSocks5TCP(TCPConn, *HTTPSocksTargetInfo)
 }
 
 type Local interface {

@@ -26,6 +26,9 @@ type LocalConfig struct {
 	TCPModerateReceiveBuffer bool
 	TCPSendBufferSize        int
 	TCPReceiveBufferSize     int
+
+	UseBypass     bool
+	BypassHandler meta.Bypass
 }
 
 type Mgr struct {
@@ -96,6 +99,53 @@ func (mgr *Mgr) Shutdown() error {
 	return nil
 }
 
+func (mgr *Mgr) HandleTCP(conn meta.TCPConn) {
+	handled := false
+	defer func() {
+		if !handled {
+			conn.Close()
+		}
+	}()
+
+	cfg := mgr.cfg
+
+	if cfg.UseBypass && cfg.BypassHandler != nil && mgr.isBypassIPv4(conn.ID().RemoteAddress) {
+		go cfg.BypassHandler.HandleHttpSocks5TCP(conn, nil)
+	} else {
+		go cfg.TransportHandler.HandleTCP(conn)
+	}
+
+	handled = true
+}
+
+func (mgr *Mgr) HandleUDP(conn meta.UDPConn) {
+	handled := false
+	defer func() {
+		if !handled {
+			conn.Close()
+		}
+	}()
+
+	// TODO: bypass
+
+	// TODO: hook DNS query thus we can save dns result into ip-map
+	// to support bypass feature
+
+	remoteHandler := mgr.cfg.TransportHandler
+	go remoteHandler.HandleUDP(conn)
+	handled = true
+}
+
+func (mgr *Mgr) OnStackReady(lgv meta.LocalGivsorNetwork) {
+	remoteHandler := mgr.cfg.TransportHandler
+	remoteHandler.OnStackReady(lgv)
+}
+
+func (mgr *Mgr) isBypassIPv4(address tcpip.Address) bool {
+	_ = address
+	return false
+}
+
 func (mgr *Mgr) createStack() (*stack.Stack, error) {
 	log.Info("localtun.Mgr createStack: new gVisor network stack")
 
@@ -114,7 +164,7 @@ func (mgr *Mgr) createStack() (*stack.Stack, error) {
 
 	stackCfg := &StackConfig{
 		LinkEndpoint:     mgr.tun.LinkEndpoint,
-		TransportHandler: mgr.cfg.TransportHandler,
+		TransportHandler: mgr,
 		Options:          opts,
 	}
 

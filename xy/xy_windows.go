@@ -6,9 +6,10 @@ import (
 	"l5proxy_cv/meta"
 )
 
-func (xy *XY) newTunMode(cfg *config.Config, handler meta.TunTransportHandler) (meta.Local, error) {
+func (xy *XY) newTunMode(cfg *config.Config, handler meta.TunTransportHandler, bypass meta.Bypass) (meta.Local, error) {
 	_ = cfg
 	_ = handler
+	_ = bypass
 	return nil, fmt.Errorf("windows not support tun mode, only works at linux/unix")
 }
 

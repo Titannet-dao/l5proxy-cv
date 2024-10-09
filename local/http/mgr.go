@@ -121,7 +121,7 @@ func (rh *requestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	targetAddress := &meta.HTTPSocksTargetAddress{}
+	targetInfo := &meta.HTTPSocksTargetInfo{}
 	tcpConn, ok := conn.(*net.TCPConn)
 	if !ok {
 		http.Error(w, "not tcp connection", http.StatusInternalServerError)
@@ -129,8 +129,8 @@ func (rh *requestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	uurl := r.URL
-	targetAddress.DomainName = uurl.Hostname()
-	targetAddress.Port = getTargetPortOrDefault(uurl)
+	targetInfo.DomainName = uurl.Hostname()
+	targetInfo.Port = getTargetPortOrDefault(uurl)
 
 	var extraBytes []byte
 
@@ -167,20 +167,20 @@ func (rh *requestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	targetAddress.ExtraBytes = extraBytes
+	targetInfo.ExtraBytes = extraBytes
 
 	cfg := rh.mgr.cfg
-	if cfg.UseBypass {
+	if cfg.UseBypass && cfg.BypassHandler != nil {
 		bypass := cfg.BypassHandler
-		if bypass.BypassAble(targetAddress.DomainName) {
-			bypass.HandleHttpSocks5TCP(httpconn{TCPConn: tcpConn}, targetAddress)
+		if bypass.BypassAble(targetInfo.DomainName) {
+			bypass.HandleHttpSocks5TCP(httpconn{TCPConn: tcpConn}, targetInfo)
 			handled = true
 		}
 	}
 
 	if !handled {
 		thandler := cfg.TransportHandler
-		thandler.HandleHttpSocks5TCP(httpconn{TCPConn: tcpConn}, targetAddress)
+		thandler.HandleHttpSocks5TCP(httpconn{TCPConn: tcpConn}, targetInfo)
 		handled = true
 	}
 }

@@ -157,6 +157,7 @@ func (mgr *Mgr) handleSocks5Request(r *request) error {
 	}
 }
 
+// NOTE: if error occurs, conn of the 'req' object must be closed in outer
 func (mgr *Mgr) handleSocks5Connect(req *request) error {
 	var extraBytes []byte
 
@@ -176,7 +177,7 @@ func (mgr *Mgr) handleSocks5Connect(req *request) error {
 	}
 
 	cfg := mgr.cfg
-	targetAddress := &meta.HTTPSocksTargetAddress{
+	targetInfo := &meta.HTTPSocksTargetInfo{
 		Port:       req.destAddr.port,
 		DomainName: req.destAddr.fqdn,
 		ExtraBytes: extraBytes,
@@ -197,15 +198,15 @@ func (mgr *Mgr) handleSocks5Connect(req *request) error {
 		TCPConn: tcpconn,
 	}
 
-	if cfg.UseBypass {
+	if cfg.UseBypass && cfg.BypassHandler != nil {
 		bypass := cfg.BypassHandler
-		if bypass.BypassAble(targetAddress.DomainName) {
-			bypass.HandleHttpSocks5TCP(socks5conn, targetAddress)
+		if bypass.BypassAble(targetInfo.DomainName) {
+			bypass.HandleHttpSocks5TCP(socks5conn, targetInfo)
 			return nil
 		}
 	}
 
-	cfg.TransportHandler.HandleHttpSocks5TCP(socks5conn, targetAddress)
+	cfg.TransportHandler.HandleHttpSocks5TCP(socks5conn, targetInfo)
 	return nil
 }
 

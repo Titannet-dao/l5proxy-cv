@@ -138,12 +138,7 @@ func (mgr *Mgr) keepalive() {
 }
 
 func (mgr *Mgr) HandleTCP(conn meta.TCPConn) {
-	handled := false
-	defer func() {
-		if !handled {
-			conn.Close()
-		}
-	}()
+	defer conn.Close()
 
 	// allocate a usable tunnel
 	tunnel, err := mgr.allocateWSTunnel()
@@ -152,24 +147,18 @@ func (mgr *Mgr) HandleTCP(conn meta.TCPConn) {
 		return
 	}
 
+	log.Infof("proxy[tun/tcp] to %s", conn.ID().LocalAddress.String())
+
 	err = tunnel.acceptTCPConn(conn)
 	if err != nil {
 		log.Errorf("tunnel.acceptTCPConn failed: %v", err)
 		return
 	}
 
-	log.Infof("proxy[tun/tcp] to %s", conn.ID().LocalAddress.String())
-
-	handled = true
 }
 
-func (mgr *Mgr) HandleHttpSocks5TCP(conn meta.TCPConn, target *meta.HTTPSocksTargetAddress) {
-	handled := false
-	defer func() {
-		if !handled {
-			conn.Close()
-		}
-	}()
+func (mgr *Mgr) HandleHttpSocks5TCP(conn meta.TCPConn, target *meta.HTTPSocksTargetInfo) {
+	defer conn.Close()
 
 	// allocate a usable tunnel
 	tunnel, err := mgr.allocateWSTunnel()
@@ -185,17 +174,10 @@ func (mgr *Mgr) HandleHttpSocks5TCP(conn meta.TCPConn, target *meta.HTTPSocksTar
 		log.Errorf("tunnel.acceptTCPConn failed: %v", err)
 		return
 	}
-
-	handled = true
 }
 
 func (mgr *Mgr) HandleUDP(conn meta.UDPConn) {
-	handled := false
-	defer func() {
-		if !handled {
-			conn.Close()
-		}
-	}()
+	defer conn.Close()
 
 	// allocate a usable tunnel
 	tunnel, err := mgr.allocateWSTunnel()
@@ -204,14 +186,13 @@ func (mgr *Mgr) HandleUDP(conn meta.UDPConn) {
 		return
 	}
 
+	log.Infof("proxy[tun/udp] to %s", conn.ID().LocalAddress.String())
+
 	err = tunnel.acceptUDPConn(conn)
 	if err != nil {
 		log.Errorf("tunnel.acceptUDPConn failed: %v", err)
 		return
 	}
-
-	log.Infof("proxy[tun/udp] to %s", conn.ID().LocalAddress.String())
-	handled = true
 }
 
 func (mgr *Mgr) nextAllocIndex() uint64 {

@@ -22,6 +22,7 @@ whitelist = "https://baobei.llwant.com/lFDBu0WTbYuClhPzXEFHyE3UWTicYU7dq9zhPLf5k
 enabled = true
 mtu = 1500
 dev = "tun0xy"
+bypass = true
 
 [http]
 enabled = true
