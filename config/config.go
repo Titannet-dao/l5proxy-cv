@@ -14,6 +14,7 @@ type Config struct {
 	HTTPMode   HTTPMode   `toml:"http"`
 	Socks5Mode Socks5Mode `toml:"socks5"`
 	TunMode    TunMode    `toml:"tun"`
+	BypassMode BypassMode `toml:"bypass"`
 }
 
 type Server struct {
@@ -29,14 +30,21 @@ type Tunnel struct {
 	Cap   int `toml:"cap"`
 }
 
+type BypassMode struct {
+	Enabled      bool   `toml:"enabled"`
+	WhitelistURL string `toml:"whitelist"`
+}
+
 type HTTPMode struct {
 	Enabled bool   `toml:"enabled"`
 	Address string `toml:"address"`
+	Bypass  bool   `toml:"bypass"`
 }
 
 type Socks5Mode struct {
 	Enabled bool   `toml:"enabled"`
 	Address string `toml:"address"`
+	Bypass  bool   `toml:"bypass"`
 }
 
 type TunMode struct {

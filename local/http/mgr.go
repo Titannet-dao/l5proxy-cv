@@ -17,9 +17,11 @@ import (
 )
 
 type LocalConfig struct {
-	Address string
+	Address   string
+	UseBypass bool
 
 	TransportHandler meta.HTTPSocks5TransportHandler
+	BypassHandler    meta.Bypass
 }
 
 type Mgr struct {
@@ -166,8 +168,18 @@ func (rh *requestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	targetAddress.ExtraBytes = extraBytes
-	thandler := rh.mgr.cfg.TransportHandler
-	if thandler != nil {
+
+	cfg := rh.mgr.cfg
+	if cfg.UseBypass {
+		bypass := cfg.BypassHandler
+		if bypass.BypassAble(targetAddress.DomainName) {
+			bypass.HandleHttpSocks5TCP(httpconn{TCPConn: tcpConn}, targetAddress)
+			handled = true
+		}
+	}
+
+	if !handled {
+		thandler := cfg.TransportHandler
 		thandler.HandleHttpSocks5TCP(httpconn{TCPConn: tcpConn}, targetAddress)
 		handled = true
 	}

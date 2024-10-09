@@ -19,9 +19,11 @@ func (hc socks5conn) ID() *stack.TransportEndpointID {
 }
 
 type LocalConfig struct {
-	Address string
+	Address   string
+	UseBypass bool
 
 	TransportHandler meta.HTTPSocks5TransportHandler
+	BypassHandler    meta.Bypass
 }
 
 type Mgr struct {
@@ -173,7 +175,7 @@ func (mgr *Mgr) handleSocks5Connect(req *request) error {
 		}
 	}
 
-	thandler := mgr.cfg.TransportHandler
+	cfg := mgr.cfg
 	targetAddress := &meta.HTTPSocksTargetAddress{
 		Port:       req.destAddr.port,
 		DomainName: req.destAddr.fqdn,
@@ -195,7 +197,15 @@ func (mgr *Mgr) handleSocks5Connect(req *request) error {
 		TCPConn: tcpconn,
 	}
 
-	thandler.HandleHttpSocks5TCP(socks5conn, targetAddress)
+	if cfg.UseBypass {
+		bypass := cfg.BypassHandler
+		if bypass.BypassAble(targetAddress.DomainName) {
+			bypass.HandleHttpSocks5TCP(socks5conn, targetAddress)
+			return nil
+		}
+	}
+
+	cfg.TransportHandler.HandleHttpSocks5TCP(socks5conn, targetAddress)
 	return nil
 }
 

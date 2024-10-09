@@ -3,6 +3,7 @@ package xy
 import (
 	"fmt"
 	"l5proxy_cv/config"
+	localbypass "l5proxy_cv/local/bypass"
 	localhttp "l5proxy_cv/local/http"
 	localsocks5 "l5proxy_cv/local/socks5"
 	"l5proxy_cv/meta"
@@ -55,6 +56,22 @@ func (xy *XY) Startup(cfg *config.Config) error {
 	remote := remote.NewMgr(remoteCfg)
 
 	var locals []meta.Local
+	var bypass meta.Bypass
+
+	if cfg.BypassMode.Enabled {
+		localCfg := &localbypass.LocalConfig{
+			WhitelistURL: cfg.BypassMode.WhitelistURL,
+		}
+
+		mgr := localbypass.NewMgr(localCfg)
+		locals = append(locals, mgr)
+
+		var ok bool
+		bypass, ok = mgr.(meta.Bypass)
+		if !ok {
+			log.Errorf("xy.Startup convert bypass mgr to meta.bypass failed")
+		}
+	}
 
 	if cfg.TunMode.Enabled {
 		l, err := xy.newTunMode(cfg, remote)
@@ -69,6 +86,8 @@ func (xy *XY) Startup(cfg *config.Config) error {
 		localCfg := &localhttp.LocalConfig{
 			TransportHandler: remote,
 			Address:          cfg.HTTPMode.Address,
+			UseBypass:        cfg.HTTPMode.Enabled && bypass != nil,
+			BypassHandler:    bypass,
 		}
 
 		locals = append(locals, localhttp.NewMgr(localCfg))
@@ -78,6 +97,8 @@ func (xy *XY) Startup(cfg *config.Config) error {
 		localCfg := &localsocks5.LocalConfig{
 			TransportHandler: remote,
 			Address:          cfg.Socks5Mode.Address,
+			UseBypass:        cfg.Socks5Mode.Enabled && bypass != nil,
+			BypassHandler:    bypass,
 		}
 
 		locals = append(locals, localsocks5.NewMgr(localCfg))

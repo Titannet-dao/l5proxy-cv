@@ -56,3 +56,8 @@ type Local interface {
 	Shutdown() error
 	Name() string
 }
+
+type Bypass interface {
+	HTTPSocks5TransportHandler
+	BypassAble(domainName string) bool
+}

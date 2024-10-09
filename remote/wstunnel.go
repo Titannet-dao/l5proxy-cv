@@ -40,6 +40,8 @@ const (
 )
 
 type WSTunnel struct {
+	id int
+
 	websocketURL string
 	reqq         *Reqq
 
@@ -57,8 +59,9 @@ type WSTunnel struct {
 	dnsResolver *AlibbResolver0
 }
 
-func newTunnel(dnsResolver *AlibbResolver0, websocketURL string, reqCap int) *WSTunnel {
+func newTunnel(id int, dnsResolver *AlibbResolver0, websocketURL string, reqCap int) *WSTunnel {
 	wst := &WSTunnel{
+		id:           id,
 		dnsResolver:  dnsResolver,
 		websocketURL: websocketURL,
 		cache:        newUdpCache(),
@@ -173,6 +176,8 @@ func (tnl *WSTunnel) onConnected(conn *websocket.Conn) {
 
 	// save for sending
 	tnl.ws = conn
+
+	log.Infof("tunnel %d websocket connected", tnl.id)
 }
 
 func (tnl *WSTunnel) onDisconnected() {
@@ -183,6 +188,8 @@ func (tnl *WSTunnel) onDisconnected() {
 		tnl.ws.Close()
 		tnl.ws = nil
 	}
+
+	log.Infof("tunnel %d websocket disconnected", tnl.id)
 }
 
 func (tnl *WSTunnel) keepalive() {

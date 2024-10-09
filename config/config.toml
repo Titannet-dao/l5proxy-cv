@@ -14,6 +14,10 @@ count = 3
 # cap: 单个隧道运行同时并发的请求数量，默认是200,建议使用默认值即可
 cap = 100
 
+[bypass]
+enabled = true
+whitelist = "https://baobei.llwant.com/lFDBu0WTbYuClhPzXEFHyE3UWTicYU7dq9zhPLf5kqrDjOW2schlH2W5w8ZxQBV8/whitelist"
+
 [tun]
 enabled = true
 mtu = 1500
@@ -22,7 +26,9 @@ dev = "tun0xy"
 [http]
 enabled = true
 address = ":5051"
+bypass = true
 
 [socks5]
 enabled = true
 address = ":5050"
+bypass = true

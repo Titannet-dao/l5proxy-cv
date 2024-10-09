@@ -76,7 +76,7 @@ func (mgr *Mgr) Startup() error {
 
 	mgr.tunnels = make([]*WSTunnel, 0, config.TunnelCount)
 	for i := 0; i < config.TunnelCount; i++ {
-		tnl := newTunnel(mgr.dnsResolver, config.WebsocketURL, config.TunnelCap)
+		tnl := newTunnel(i, mgr.dnsResolver, config.WebsocketURL, config.TunnelCap)
 		if config.Protector != nil {
 			tnl.protector = config.Protector
 		}
@@ -157,6 +157,8 @@ func (mgr *Mgr) HandleTCP(conn meta.TCPConn) {
 		return
 	}
 
+	log.Infof("proxy[tun/tcp] to %s", conn.ID().LocalAddress.String())
+
 	handled = true
 }
 
@@ -174,6 +176,8 @@ func (mgr *Mgr) HandleHttpSocks5TCP(conn meta.TCPConn, target *meta.HTTPSocksTar
 		log.Errorf("mgr.allocateWSTunnel failed: %v", err)
 		return
 	}
+
+	log.Infof("proxy[http-socks5/tcp] to %s:%d", target.DomainName, target.Port)
 
 	err = tunnel.acceptHttpSocks5TCPConn(conn, target)
 	if err != nil {
@@ -205,6 +209,7 @@ func (mgr *Mgr) HandleUDP(conn meta.UDPConn) {
 		return
 	}
 
+	log.Infof("proxy[tun/udp] to %s", conn.ID().LocalAddress.String())
 	handled = true
 }
 
