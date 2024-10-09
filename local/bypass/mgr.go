@@ -3,6 +3,7 @@ package localbypass
 import (
 	"fmt"
 	"l5proxy_cv/meta"
+	"l5proxy_cv/mydns"
 	"net"
 	"sync"
 	"time"
@@ -74,9 +75,18 @@ func (mgr *Mgr) Shutdown() error {
 func (mgr *Mgr) HandleHttpSocks5TCP(conn meta.TCPConn, address *meta.HTTPSocksTargetAddress) {
 	defer conn.Close()
 
-	d := net.Dialer{Timeout: 5 * time.Second}
-	addr := fmt.Sprintf("%s:%d", address.DomainName, address.Port)
-	conn2, err := d.Dial("tcp", addr)
+	var addr string
+	if address != nil {
+		addr = fmt.Sprintf("%s:%d", address.DomainName, address.Port)
+	} else if conn.ID() != nil {
+		// use conn remote address
+		addr = conn.ID().RemoteAddress.String()
+	} else {
+		log.Errorf("localbypass.Mgr handle tcp failed, no target address found")
+		return
+	}
+
+	conn2, err := mydns.DialWithProtector(nil, mgr.cfg.Protector, nil, "tcp", addr)
 	if err != nil {
 		log.Errorf("localbypass.Mgr dial %s failed:%s", addr, err)
 		return
@@ -84,7 +94,7 @@ func (mgr *Mgr) HandleHttpSocks5TCP(conn meta.TCPConn, address *meta.HTTPSocksTa
 
 	defer conn2.Close()
 
-	if len(address.ExtraBytes) > 0 {
+	if address != nil && len(address.ExtraBytes) > 0 {
 		n, err := conn2.Write(address.ExtraBytes)
 		if err != nil {
 			log.Errorf("localbypass.Mgr write extra bytes to %s failed:%s", addr, err)

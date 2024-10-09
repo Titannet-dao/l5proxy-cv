@@ -14,7 +14,8 @@ import (
 )
 
 const (
-	alibbDNSServer = "223.5.5.5:53" // use alibaba dns server
+	alibbDNSServer     = "223.5.5.5:53" // use alibaba dns server
+	defaultDialTimeout = 5 * time.Second
 )
 
 type AlibbResolver0 struct {
@@ -128,31 +129,36 @@ func resolveHost4(host string, protector func(fd uint64), nameServer string) (ne
 func DialWithProtector(dnsResolver *AlibbResolver0, protector func(uint64),
 	ctx context.Context, network, addr string) (net.Conn, error) {
 
-	var hostString, portString string
-	if strings.Contains(addr, ":") {
-		ss := strings.Split(addr, ":")
-		hostString = ss[0]
-		portString = ss[1]
-	} else {
-		hostString = addr
-		portString = ""
-	}
-
-	ip, err := dnsResolver.GetHostIP(hostString)
-	if err != nil {
-		return nil, err
-	}
-
 	var addr2 string
-	if len(portString) > 0 {
-		addr2 = fmt.Sprintf("%s:%s", ip.String(), portString)
+	if dnsResolver != nil {
+		var hostString, portString string
+		if strings.Contains(addr, ":") {
+			ss := strings.Split(addr, ":")
+			hostString = ss[0]
+			portString = ss[1]
+		} else {
+			hostString = addr
+			portString = ""
+		}
+
+		ip, err := dnsResolver.GetHostIP(hostString)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(portString) > 0 {
+			addr2 = fmt.Sprintf("%s:%s", ip.String(), portString)
+		} else {
+			addr2 = ip.String()
+		}
 	} else {
-		addr2 = ip.String()
+		addr2 = addr
 	}
 
 	var d2 *net.Dialer
 	if protector != nil {
 		d2 = &net.Dialer{
+			Timeout: defaultDialTimeout,
 			Control: func(network, address string, c syscall.RawConn) error {
 				c.Control(func(fd uintptr) {
 					protector(uint64(fd))
@@ -161,7 +167,9 @@ func DialWithProtector(dnsResolver *AlibbResolver0, protector func(uint64),
 			},
 		}
 	} else {
-		d2 = &net.Dialer{}
+		d2 = &net.Dialer{
+			Timeout: defaultDialTimeout,
+		}
 	}
 
 	if ctx != nil {
