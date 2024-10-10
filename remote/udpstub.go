@@ -40,6 +40,11 @@ func (u *UdpStub) writeTo(data []byte, addr net.Addr) error {
 
 	u.lastActvity = time.Now()
 
+	// call hook
+	if conn.HasWriteHook() {
+		conn.CallWriteHook(data)
+	}
+
 	wrote := 0
 	l := len(data)
 	for {

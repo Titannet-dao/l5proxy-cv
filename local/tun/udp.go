@@ -43,8 +43,24 @@ func withUDPHandler(handle func(meta.UDPConn)) Option {
 type udpConn struct {
 	*gonet.UDPConn
 	id stack.TransportEndpointID
+
+	writeHook func([]byte)
 }
 
 func (c *udpConn) ID() *stack.TransportEndpointID {
 	return &c.id
+}
+
+func (c *udpConn) UseWriteHook(hook func(h []byte)) {
+	c.writeHook = hook
+}
+
+func (c *udpConn) HasWriteHook() bool {
+	return c.writeHook != nil
+}
+
+func (c *udpConn) CallWriteHook(data []byte) {
+	if c.writeHook != nil {
+		c.writeHook(data)
+	}
 }

@@ -23,6 +23,7 @@ enabled = true
 mtu = 1500
 dev = "tun0xy"
 bypass = true
+nshint = "8.8.8.8:53"
 
 [http]
 enabled = true

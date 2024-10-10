@@ -52,6 +52,7 @@ type TunMode struct {
 	Bypass  bool   `toml:"bypass"`
 	Device  string `toml:"dev"`
 	MTU     uint32 `toml:"mtu"`
+	NSHint  string `toml:"nshint"`
 	FD      int
 }
 

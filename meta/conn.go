@@ -23,6 +23,10 @@ type UDPConn interface {
 
 	// ID returns the transport endpoint id of UDPConn.
 	ID() *stack.TransportEndpointID
+
+	UseWriteHook(hook func(data []byte))
+	HasWriteHook() bool
+	CallWriteHook(data []byte)
 }
 
 // TunTransportHandler is a TCP/UDP connection handler that implements
@@ -59,5 +63,6 @@ type Local interface {
 
 type Bypass interface {
 	HTTPSocks5TransportHandler
-	BypassAble(domainName string) bool
+	BypassAble(ipOrDomainName string) bool
+	BypassAbleDomain(domainName string) bool
 }

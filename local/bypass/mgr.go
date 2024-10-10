@@ -161,25 +161,29 @@ func (mgr *Mgr) pipeTcpSocket(from meta.TCPConn, to meta.TCPConn, wg *sync.WaitG
 	wg.Done()
 }
 
-func (mgr *Mgr) BypassAble(domainName string) bool {
+func (mgr *Mgr) BypassAble(ipOrDomainName string) bool {
 	if !mgr.isActivated {
 		return false
 	}
 
-	if mgr.isLocalIP(domainName) {
+	if mgr.isLocalIP(ipOrDomainName) {
 		return true
 	}
 
-	if mgr.isDomainInWhitelist(domainName) {
+	if mgr.isDomainInWhitelist(ipOrDomainName) {
 		return true
 	}
 
 	return false
 }
 
-func (mgr *Mgr) isLocalIP(domainName string) bool {
+func (mgr *Mgr) BypassAbleDomain(domainName string) bool {
+	return mgr.isDomainInWhitelist(domainName)
+}
+
+func (mgr *Mgr) isLocalIP(ip string) bool {
 	// TODO: ipv6
-	return isStringLocalIP4(domainName)
+	return isStringLocalIP4(ip)
 }
 
 func (mgr *Mgr) isDomainInWhitelist(domainName string) bool {
@@ -188,3 +192,7 @@ func (mgr *Mgr) isDomainInWhitelist(domainName string) bool {
 
 	return isDomainIn(domainName, mgr.whitelist)
 }
+
+var (
+	_ meta.Bypass = &Mgr{}
+)

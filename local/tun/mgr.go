@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"l5proxy_cv/meta"
+	"net"
 	"time"
 
 	"gvisor.dev/gvisor/pkg/tcpip"
@@ -29,6 +30,8 @@ type LocalConfig struct {
 
 	UseBypass     bool
 	BypassHandler meta.Bypass
+
+	NSHint string
 }
 
 type Mgr struct {
@@ -36,6 +39,8 @@ type Mgr struct {
 
 	tun   *TUN
 	stack *stack.Stack
+
+	nsAddrHint *net.UDPAddr
 }
 
 func NewMgr(cfg *LocalConfig) meta.Local {
@@ -44,6 +49,13 @@ func NewMgr(cfg *LocalConfig) meta.Local {
 		stack: nil,
 	}
 
+	addrstr := cfg.NSHint
+	if len(addrstr) == 0 {
+		addrstr = "8.8.8.8:53"
+	}
+
+	udpAddr, _ := net.ResolveUDPAddr("udp", addrstr)
+	mgr.nsAddrHint = udpAddr
 	return mgr
 }
 
@@ -126,14 +138,45 @@ func (mgr *Mgr) HandleUDP(conn meta.UDPConn) {
 		}
 	}()
 
-	// TODO: bypass
-
-	// TODO: hook DNS query thus we can save dns result into ip-map
-	// to support bypass feature
+	if mgr.cfg.UseBypass && mgr.cfg.BypassHandler != nil && mgr.isMyHint(conn.ID()) {
+		conn.UseWriteHook(func(data []byte) {
+			mgr.onDNSResult(data)
+		})
+	}
 
 	remoteHandler := mgr.cfg.TransportHandler
 	go remoteHandler.HandleUDP(conn)
 	handled = true
+}
+
+func (mgr *Mgr) onDNSResult(data []byte) {
+
+}
+
+func equalBytes(a []byte, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	for i := 0; i < len(a); i++ {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (mgr *Mgr) isMyHint(id *stack.TransportEndpointID) bool {
+
+	ip := id.LocalAddress
+	port := id.LocalPort
+
+	if mgr.nsAddrHint.Port == int(port) && equalBytes([]byte(mgr.nsAddrHint.IP), ip.AsSlice()) {
+		return true
+	}
+
+	return false
 }
 
 func (mgr *Mgr) OnStackReady(lgv meta.LocalGivsorNetwork) {
