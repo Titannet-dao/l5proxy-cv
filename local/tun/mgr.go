@@ -14,6 +14,7 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/transport/udp"
 	"gvisor.dev/gvisor/pkg/waiter"
 
+	mkdns "github.com/miekg/dns"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -41,12 +42,15 @@ type Mgr struct {
 	stack *stack.Stack
 
 	nsAddrHint *net.UDPAddr
+
+	ipdomainRepo *domainIPRepo
 }
 
 func NewMgr(cfg *LocalConfig) meta.Local {
 	mgr := &Mgr{
-		cfg:   *cfg,
-		stack: nil,
+		cfg:          *cfg,
+		stack:        nil,
+		ipdomainRepo: newDomainIPRepo(),
 	}
 
 	addrstr := cfg.NSHint
@@ -139,8 +143,9 @@ func (mgr *Mgr) HandleUDP(conn meta.UDPConn) {
 	}()
 
 	if mgr.cfg.UseBypass && mgr.cfg.BypassHandler != nil && mgr.isMyHint(conn.ID()) {
+		log.Infof("localtun.Mgr HandleUDP set hook to %s", conn.ID().RemoteAddress.String())
 		conn.UseWriteHook(func(data []byte) {
-			mgr.onDNSResult(data)
+			mgr.hookDNSResult(data)
 		})
 	}
 
@@ -149,11 +154,41 @@ func (mgr *Mgr) HandleUDP(conn meta.UDPConn) {
 	handled = true
 }
 
-func (mgr *Mgr) onDNSResult(data []byte) {
+func (mgr *Mgr) hookDNSResult(data []byte) {
+	resp := new(mkdns.Msg)
+	err := resp.Unpack(data)
+	if err != nil {
+		log.Errorf("localtun.Mgr hookDNSResult error:%s", err)
+		return
+	}
 
+	if len(resp.Question) == 0 {
+		log.Error("localtun.Mgr dns reply question field is empty")
+		return
+	}
+
+	domain := resp.Question[0]
+	domainName := domain.Name
+	domainName = domain.Name[0 : len(domainName)-1] // remove last '.'
+	bypass := mgr.cfg.BypassHandler.BypassAbleDomain(domainName)
+	if !bypass {
+		return
+	}
+
+	ips := make([]net.IP, 0, len(resp.Answer))
+	for _, answer := range resp.Answer {
+		t, ok := answer.(*mkdns.A)
+		if ok {
+			ips = append(ips, t.A)
+		}
+	}
+
+	if len(ips) > 0 {
+		mgr.ipdomainRepo.updateDomain(domainName, ips)
+	}
 }
 
-func equalBytes(a []byte, b []byte) bool {
+func equalBytes(a, b []byte) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -185,8 +220,7 @@ func (mgr *Mgr) OnStackReady(lgv meta.LocalGivsorNetwork) {
 }
 
 func (mgr *Mgr) isBypassIPv4(address tcpip.Address) bool {
-	_ = address
-	return false
+	return mgr.ipdomainRepo.lookup(address.AsSlice())
 }
 
 func (mgr *Mgr) createStack() (*stack.Stack, error) {

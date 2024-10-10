@@ -20,6 +20,9 @@ require (
 
 require (
 	github.com/BurntSushi/toml v1.4.0
+	github.com/gaissmai/bart v0.13.0
 	github.com/gorilla/websocket v1.5.3
 	golang.org/x/sys v0.22.0
 )
+
+require github.com/bits-and-blooms/bitset v1.14.3 // indirect
