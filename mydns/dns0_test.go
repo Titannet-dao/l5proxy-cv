@@ -13,7 +13,7 @@ func TestResolve(t *testing.T) {
 	// 	}
 	// }
 
-	ip, err := resolveHost4("baobei.llwant.com", nil, alibbDNSServer)
+	ip, err := resolveHost4("baobei.llwant.com", nil)
 	if err != nil {
 		t.Errorf("failed resolveHost:%s", err)
 	}

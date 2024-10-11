@@ -176,7 +176,7 @@ func (mgr *Mgr) HandleHttpSocks5TCP(conn meta.TCPConn, target *meta.HTTPSocksTar
 	}
 }
 
-func (mgr *Mgr) HandleUDP(conn meta.UDPConn) {
+func (mgr *Mgr) HandleUDP(conn meta.UDPConn, extra []byte) {
 	defer conn.Close()
 
 	// allocate a usable tunnel
@@ -188,7 +188,7 @@ func (mgr *Mgr) HandleUDP(conn meta.UDPConn) {
 
 	log.Infof("proxy[tun/udp] to %s", conn.ID().LocalAddress.String())
 
-	err = tunnel.acceptUDPConn(conn)
+	err = tunnel.acceptUDPConn(conn, extra)
 	if err != nil {
 		log.Errorf("tunnel.acceptUDPConn failed: %v", err)
 		return

@@ -40,11 +40,6 @@ func (u *UdpStub) writeTo(data []byte, addr net.Addr) error {
 
 	u.lastActvity = time.Now()
 
-	// call hook
-	if conn.HasWriteHook() {
-		conn.CallWriteHook(data)
-	}
-
 	wrote := 0
 	l := len(data)
 	for {
@@ -67,12 +62,14 @@ func (u *UdpStub) onUDPMessage(data []byte) {
 	u.tnl.onClientUDPData(data, u.srcAddress(), u.dstAddress())
 }
 
-func (u *UdpStub) proxy() {
+func (u *UdpStub) proxy(extra []byte) {
 	conn := u.conn
 	if conn == nil {
 		log.Error("conn == nil")
 		return
 	}
+
+	u.onUDPMessage(extra)
 
 	buf := make([]byte, 4096)
 	for {

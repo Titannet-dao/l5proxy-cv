@@ -10,7 +10,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func (xy *XY) newTunMode(cfg *config.Config, handler meta.TunTransportHandler, bypass meta.Bypass) (meta.Local, error) {
+func (xy *XY) newTunMode(cfg *config.Config, handler meta.TunTransportHandler,
+	bypass meta.Bypass, protector func(fd uint64)) (meta.Local, error) {
 
 	localCfg := &localtun.LocalConfig{
 		TransportHandler: handler,
@@ -19,6 +20,7 @@ func (xy *XY) newTunMode(cfg *config.Config, handler meta.TunTransportHandler, b
 		UseBypass:        cfg.TunMode.Enabled && bypass != nil,
 		BypassHandler:    bypass,
 		Device:           cfg.TunMode.Device,
+		Protector:        protector,
 	}
 
 	return localtun.NewMgr(localCfg), nil

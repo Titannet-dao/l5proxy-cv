@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"l5proxy_cv/meta"
 	"net"
+	"net/netip"
 	"time"
 
 	"gvisor.dev/gvisor/pkg/tcpip"
@@ -33,6 +34,8 @@ type LocalConfig struct {
 	BypassHandler meta.Bypass
 
 	NSHint string
+
+	Protector func(fd uint64)
 }
 
 type Mgr struct {
@@ -41,7 +44,7 @@ type Mgr struct {
 	tun   *TUN
 	stack *stack.Stack
 
-	nsAddrHint *net.UDPAddr
+	nsAddrHint netip.AddrPort
 
 	ipdomainRepo *domainIPRepo
 }
@@ -58,7 +61,7 @@ func NewMgr(cfg *LocalConfig) meta.Local {
 		addrstr = "8.8.8.8:53"
 	}
 
-	udpAddr, _ := net.ResolveUDPAddr("udp", addrstr)
+	udpAddr, _ := netip.ParseAddrPort(addrstr)
 	mgr.nsAddrHint = udpAddr
 	return mgr
 }
@@ -125,7 +128,7 @@ func (mgr *Mgr) HandleTCP(conn meta.TCPConn) {
 
 	cfg := mgr.cfg
 
-	if cfg.UseBypass && cfg.BypassHandler != nil && mgr.isBypassIPv4(conn.ID().RemoteAddress) {
+	if cfg.UseBypass && cfg.BypassHandler != nil && mgr.isBypassIPv4(conn.ID().LocalAddress) {
 		go cfg.BypassHandler.HandleHttpSocks5TCP(conn, nil)
 	} else {
 		go cfg.TransportHandler.HandleTCP(conn)
@@ -134,7 +137,8 @@ func (mgr *Mgr) HandleTCP(conn meta.TCPConn) {
 	handled = true
 }
 
-func (mgr *Mgr) HandleUDP(conn meta.UDPConn) {
+func (mgr *Mgr) HandleUDP(conn meta.UDPConn, extra []byte) {
+	_ = extra
 	handled := false
 	defer func() {
 		if !handled {
@@ -143,18 +147,17 @@ func (mgr *Mgr) HandleUDP(conn meta.UDPConn) {
 	}()
 
 	if mgr.cfg.UseBypass && mgr.cfg.BypassHandler != nil && mgr.isMyHint(conn.ID()) {
-		log.Infof("localtun.Mgr HandleUDP set hook to %s", conn.ID().RemoteAddress.String())
-		conn.UseWriteHook(func(data []byte) {
-			mgr.hookDNSResult(data)
-		})
+		// handle our DNS query
+		go mgr.handleDNSQuery(conn)
+	} else {
+		remoteHandler := mgr.cfg.TransportHandler
+		go remoteHandler.HandleUDP(conn, nil)
 	}
 
-	remoteHandler := mgr.cfg.TransportHandler
-	go remoteHandler.HandleUDP(conn)
 	handled = true
 }
 
-func (mgr *Mgr) hookDNSResult(data []byte) {
+func (mgr *Mgr) catchDNSResult(data []byte) {
 	resp := new(mkdns.Msg)
 	err := resp.Unpack(data)
 	if err != nil {
@@ -207,7 +210,8 @@ func (mgr *Mgr) isMyHint(id *stack.TransportEndpointID) bool {
 	ip := id.LocalAddress
 	port := id.LocalPort
 
-	if mgr.nsAddrHint.Port == int(port) && equalBytes([]byte(mgr.nsAddrHint.IP), ip.AsSlice()) {
+	ip2 := ip.AsSlice()
+	if mgr.nsAddrHint.Port() == port && equalBytes([]byte(mgr.nsAddrHint.Addr().AsSlice()), ip2) {
 		return true
 	}
 

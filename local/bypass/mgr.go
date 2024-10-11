@@ -76,11 +76,12 @@ func (mgr *Mgr) HandleHttpSocks5TCP(conn meta.TCPConn, targetInfo *meta.HTTPSock
 	defer conn.Close()
 
 	var addr string
+	var id = conn.ID()
 	if targetInfo != nil {
 		addr = fmt.Sprintf("%s:%d", targetInfo.DomainName, targetInfo.Port)
-	} else if conn.ID() != nil {
+	} else if id != nil {
 		// use conn remote address
-		addr = conn.ID().RemoteAddress.String()
+		addr = fmt.Sprintf("%s:%d", id.LocalAddress.String(), id.LocalPort)
 	} else {
 		log.Errorf("localbypass.Mgr handle tcp failed, no target address found")
 		return

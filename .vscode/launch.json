@@ -11,9 +11,9 @@
             "mode": "auto",
             "args": [
                 "-c",
-                "../config/config.toml"
+                "../../config/config.toml"
             ],
-            "program": "./linux"
+            "program": "./cmd/l5proxy-cv"
         }
     ]
 }

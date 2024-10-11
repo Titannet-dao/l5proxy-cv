@@ -496,7 +496,7 @@ func (tnl *WSTunnel) onClientCreateByDomain(req *Req, target *meta.HTTPSocksTarg
 	tnl.send(buf)
 }
 
-func (tnl *WSTunnel) acceptUDPConn(conn meta.UDPConn) error {
+func (tnl *WSTunnel) acceptUDPConn(conn meta.UDPConn, extra []byte) error {
 	src := &net.UDPAddr{Port: int(conn.ID().RemotePort), IP: conn.ID().RemoteAddress.AsSlice()}
 	dst := &net.UDPAddr{Port: int(conn.ID().LocalPort), IP: conn.ID().LocalAddress.AsSlice()}
 
@@ -509,7 +509,7 @@ func (tnl *WSTunnel) acceptUDPConn(conn meta.UDPConn) error {
 
 	ustub = newUdpStub(tnl, conn)
 	tnl.cache.add(ustub)
-	ustub.proxy()
+	ustub.proxy(extra)
 
 	return nil
 }
@@ -541,7 +541,7 @@ func (tnl *WSTunnel) onServerUDPData(msg []byte) error {
 
 		ustub = newUdpStub(tnl, conn)
 		tnl.cache.add(ustub)
-		go ustub.proxy()
+		go ustub.proxy(nil)
 
 		log.Infof("onServerUDPData, new UDPConn src %s dst %s for reverse proxy", src.String(), dst.String())
 	}

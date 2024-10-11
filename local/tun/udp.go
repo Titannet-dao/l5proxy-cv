@@ -12,7 +12,7 @@ import (
 	"gvisor.dev/gvisor/pkg/waiter"
 )
 
-func withUDPHandler(handle func(meta.UDPConn)) Option {
+func withUDPHandler(handle func(meta.UDPConn, []byte)) Option {
 	return func(s *stack.Stack) error {
 		udpForwarder := udp.NewForwarder(s, func(r *udp.ForwarderRequest) {
 			var (
@@ -33,7 +33,7 @@ func withUDPHandler(handle func(meta.UDPConn)) Option {
 				UDPConn: gonet.NewUDPConn(&wq, ep),
 				id:      id,
 			}
-			handle(conn)
+			handle(conn, nil)
 		})
 		s.SetTransportProtocolHandler(udp.ProtocolNumber, udpForwarder.HandlePacket)
 		return nil
@@ -43,24 +43,8 @@ func withUDPHandler(handle func(meta.UDPConn)) Option {
 type udpConn struct {
 	*gonet.UDPConn
 	id stack.TransportEndpointID
-
-	writeHook func([]byte)
 }
 
 func (c *udpConn) ID() *stack.TransportEndpointID {
 	return &c.id
-}
-
-func (c *udpConn) UseWriteHook(hook func(h []byte)) {
-	c.writeHook = hook
-}
-
-func (c *udpConn) HasWriteHook() bool {
-	return c.writeHook != nil
-}
-
-func (c *udpConn) CallWriteHook(data []byte) {
-	if c.writeHook != nil {
-		c.writeHook(data)
-	}
 }

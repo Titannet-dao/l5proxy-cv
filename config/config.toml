@@ -10,7 +10,7 @@ loglevel = "info"
 
 [tunnel]
 # count: WebSocket隧道数量，默认是3，一般不用填写,建议使用默认值即可
-count = 3
+count = 1
 # cap: 单个隧道运行同时并发的请求数量，默认是200,建议使用默认值即可
 cap = 100
 

@@ -75,7 +75,7 @@ func (xy *XY) Startup(cfg *config.Config) error {
 	}
 
 	if cfg.TunMode.Enabled {
-		l, err := xy.newTunMode(cfg, remote, bypass)
+		l, err := xy.newTunMode(cfg, remote, bypass, protector)
 		if err != nil {
 			log.Errorf("xy.Startup newTunMode failed:%s", err)
 		} else {

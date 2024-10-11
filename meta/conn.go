@@ -23,17 +23,13 @@ type UDPConn interface {
 
 	// ID returns the transport endpoint id of UDPConn.
 	ID() *stack.TransportEndpointID
-
-	UseWriteHook(hook func(data []byte))
-	HasWriteHook() bool
-	CallWriteHook(data []byte)
 }
 
 // TunTransportHandler is a TCP/UDP connection handler that implements
 // HandleTCP and HandleUDP methods.
 type TunTransportHandler interface {
 	HandleTCP(TCPConn)
-	HandleUDP(UDPConn)
+	HandleUDP(UDPConn, []byte)
 
 	OnStackReady(LocalGivsorNetwork)
 }

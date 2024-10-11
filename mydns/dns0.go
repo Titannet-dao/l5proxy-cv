@@ -52,7 +52,7 @@ func (r *AlibbResolver0) GetHostIP(host string) (net.IP, error) {
 	ip = net.ParseIP(r.host)
 	if ip == nil {
 		// not IP form, need DNS query
-		ip, err = resolveHost4(r.host, r.protector, alibbDNSServer)
+		ip, err = resolveHost4(r.host, r.protector)
 		if err != nil {
 			return nil, err
 		}
@@ -64,14 +64,7 @@ func (r *AlibbResolver0) GetHostIP(host string) (net.IP, error) {
 	return ip, nil
 }
 
-func resolveHost4(host string, protector func(fd uint64), nameServer string) (net.IP, error) {
-	msg := new(mkdns.Msg)
-	msg.SetQuestion(mkdns.Fqdn(host), mkdns.TypeA)
-	packed, err := msg.Pack() // generate a DNS query packet
-	if err != nil {
-		return nil, err
-	}
-
+func AlibbDNSQuery(data []byte, protector func(fd uint64)) ([]byte, error) {
 	var d *net.Dialer
 	if protector != nil {
 		d = &net.Dialer{
@@ -86,30 +79,46 @@ func resolveHost4(host string, protector func(fd uint64), nameServer string) (ne
 		d = &net.Dialer{}
 	}
 
-	udpConn, err := d.Dial("udp", nameServer)
+	udpConn, err := d.Dial("udp", alibbDNSServer)
 	if err != nil {
 		return nil, err
 	}
 
 	defer udpConn.Close()
-	n, err := udpConn.Write(packed)
+	n, err := udpConn.Write(data)
 	if err != nil {
 		return nil, err
 	}
 
-	if n != len(packed) {
-		return nil, fmt.Errorf("udp send to dns server length not match:%d != %d", n, len(packed))
+	if n != len(data) {
+		return nil, fmt.Errorf("udp send to dns server length not match:%d != %d", n, len(data))
 	}
 
 	// read reply from DNS server
 	buf := make([]byte, 600) // 600 is enough for DNS query reply
-	udpConn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	udpConn.SetReadDeadline(time.Now().Add(5 * time.Second))
 	n, err = udpConn.Read(buf)
 	if err != nil {
 		return nil, err
 	}
 
 	buf = buf[:n]
+	return buf, nil
+}
+
+func resolveHost4(host string, protector func(fd uint64)) (net.IP, error) {
+	msg := new(mkdns.Msg)
+	msg.SetQuestion(mkdns.Fqdn(host), mkdns.TypeA)
+	packed, err := msg.Pack() // generate a DNS query packet
+	if err != nil {
+		return nil, err
+	}
+
+	buf, err := AlibbDNSQuery(packed, protector)
+	if err != nil {
+		return nil, err
+	}
+
 	resp := new(mkdns.Msg)
 	err = resp.Unpack(buf)
 	if err != nil {
