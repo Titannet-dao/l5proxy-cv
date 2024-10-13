@@ -130,7 +130,7 @@ func (mgr *Mgr) HandleHttpSocks5TCP(conn meta.TCPConn, targetInfo *meta.HTTPSock
 }
 
 func (mgr *Mgr) pipeTcpSocket(from meta.TCPConn, to meta.TCPConn, wg *sync.WaitGroup) {
-	buf := make([]byte, 4096)
+	buf := make([]byte, 16*1024) // 16K
 	for {
 		n, err := from.Read(buf)
 

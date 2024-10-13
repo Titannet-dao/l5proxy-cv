@@ -101,7 +101,7 @@ func (r *Req) proxy() {
 		return
 	}
 
-	buf := make([]byte, 4096)
+	buf := make([]byte, 16*1024) // 16K
 	for {
 		n, err := conn.Read(buf)
 

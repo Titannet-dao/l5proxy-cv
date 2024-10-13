@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	readBufSize  = 16 * 1024
-	writeBufSize = 16 * 1024
+	wsReadBufSize  = 256 * 1024
+	wsWriteBufSize = 256 * 1024
 
 	websocketWriteDealine = 5
 )
@@ -278,8 +278,8 @@ func (tnl *WSTunnel) send(data []byte) {
 
 func (tnl *WSTunnel) dial() (*websocket.Conn, error) {
 	d := websocket.Dialer{
-		ReadBufferSize:   readBufSize,
-		WriteBufferSize:  writeBufSize,
+		ReadBufferSize:   wsReadBufSize,
+		WriteBufferSize:  wsWriteBufSize,
 		HandshakeTimeout: 5 * time.Second,
 		NetDialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			return mydns.DialWithProtector(tnl.dnsResolver, tnl.protector, ctx, network, addr)
