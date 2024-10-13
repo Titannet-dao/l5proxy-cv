@@ -28,6 +28,8 @@ type Server struct {
 type Tunnel struct {
 	Count int `toml:"count"`
 	Cap   int `toml:"cap"`
+
+	WithTimestamp bool `toml:"timestamp"`
 }
 
 type BypassMode struct {

@@ -12,9 +12,10 @@ import (
 )
 
 type MgrConfig struct {
-	WebsocketURL string
-	TunnelCount  int
-	TunnelCap    int
+	WebsocketURL  string
+	TunnelCount   int
+	TunnelCap     int
+	WithTimestamp bool
 
 	Protector func(fd uint64)
 }
@@ -77,7 +78,7 @@ func (mgr *Mgr) Startup() error {
 
 	mgr.tunnels = make([]*WSTunnel, 0, config.TunnelCount)
 	for i := 0; i < config.TunnelCount; i++ {
-		tnl := newTunnel(i, mgr.dnsResolver, config.WebsocketURL, config.TunnelCap)
+		tnl := newTunnel(i, mgr.dnsResolver, config)
 		if config.Protector != nil {
 			tnl.protector = config.Protector
 		}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"l5proxy_cv/meta"
 	"net"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
@@ -183,19 +184,23 @@ func (mgr *Mgr) handleSocks5Connect(req *request) error {
 		ExtraBytes: extraBytes,
 	}
 
-	tcpconn, ok := req.conn.(*net.TCPConn)
+	tcpConn, ok := req.conn.(*net.TCPConn)
 	if !ok {
 		return fmt.Errorf("handleConnect socks5 conn isn't tcp conn")
 	}
 
-	local := tcpconn.LocalAddr().(*net.TCPAddr)
+	tcpConn.SetKeepAlivePeriod(5 * time.Second)
+	tcpConn.SetNoDelay(true)
+	tcpConn.SetKeepAlive(true)
+
+	local := tcpConn.LocalAddr().(*net.TCPAddr)
 	bind := addrSpec{ip: local.IP, port: local.Port}
 	if err := replySocks5Client(req.conn, successReply, &bind); err != nil {
 		return fmt.Errorf("failed to send reply to socks5 client: %v", err)
 	}
 
 	socks5conn := socks5conn{
-		TCPConn: tcpconn,
+		TCPConn: tcpConn,
 	}
 
 	if cfg.UseBypass && cfg.BypassHandler != nil {

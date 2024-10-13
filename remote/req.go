@@ -11,6 +11,16 @@ const (
 	tcpSocketWriteDeadline = 5
 )
 
+type ReqContext struct {
+	From string
+	To   string
+
+	ServiceTime time.Duration
+
+	FromBytes int64
+	ToBytes   int64
+}
+
 type Req struct {
 	isUsed bool
 	idx    uint16
@@ -19,6 +29,8 @@ type Req struct {
 	owner *WSTunnel
 
 	conn meta.TCPConn
+
+	ctx *ReqContext
 }
 
 func newReq(t *WSTunnel, idx uint16) *Req {
@@ -38,7 +50,7 @@ func (r *Req) free() {
 	}
 }
 
-func (r *Req) onServerData(data []byte) error {
+func (r *Req) onServerData(data []byte, withlog bool) error {
 	// if write failed, return an error, outer should free this request
 	conn := r.conn
 	if conn != nil {
@@ -53,6 +65,15 @@ func (r *Req) onServerData(data []byte) error {
 
 			wrote = wrote + n
 			if wrote == l {
+				ctx := r.ctx
+				if ctx != nil {
+					ctx.ToBytes = ctx.ToBytes + int64(wrote)
+
+					if withlog {
+						log.Infof("[%s] --> [%s], bytes:%d", ctx.To, ctx.From, l)
+					}
+				}
+
 				break
 			}
 		}
@@ -105,6 +126,15 @@ func (r *Req) proxy() {
 			break
 		}
 
+		now := time.Now()
+
 		owner.onClientReqData(r.idx, r.tag, buf[:n])
+
+		ctx := r.ctx
+		elapsed := time.Since(now).Round(time.Millisecond)
+		if ctx != nil {
+			ctx.FromBytes = ctx.FromBytes + int64(n)
+			log.Infof("req [%s] --> [%s] tranfor bytes:%d, time:%s", ctx.From, ctx.To, n, elapsed)
+		}
 	}
 }

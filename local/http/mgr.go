@@ -128,6 +128,10 @@ func (rh *requestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tcpConn.SetKeepAlivePeriod(5 * time.Second)
+	tcpConn.SetNoDelay(true)
+	tcpConn.SetKeepAlive(true)
+
 	uurl := r.URL
 	targetInfo.DomainName = uurl.Hostname()
 	targetInfo.Port = getTargetPortOrDefault(uurl)

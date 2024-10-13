@@ -7,6 +7,7 @@ import (
 	"l5proxy_cv/meta"
 	"l5proxy_cv/mydns"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,17 +26,16 @@ const (
 
 const (
 	cMDNone              = 0
-	cMDReqBegin          = 1
 	cMDReqData           = 1
 	cMDReqCreated        = 2
 	cMDReqClientClosed   = 3
 	cMDReqClientFinished = 4
 	cMDReqServerFinished = 5
 	cMDReqServerClosed   = 6
-	cMDReqEnd            = 7
 	cMDDNSReq            = 7
 	cMDDNSRsp            = 8
 	cMDUDPReq            = 9
+	cMDReqDataExt        = 10
 )
 
 type WSTunnel struct {
@@ -56,17 +56,20 @@ type WSTunnel struct {
 	mgr   *Mgr
 
 	dnsResolver *mydns.AlibbResolver0
+
+	withTimestamp bool
 }
 
-func newTunnel(id int, dnsResolver *mydns.AlibbResolver0, websocketURL string, reqCap int) *WSTunnel {
+func newTunnel(id int, dnsResolver *mydns.AlibbResolver0, config *MgrConfig) *WSTunnel {
 	wst := &WSTunnel{
-		id:           id,
-		dnsResolver:  dnsResolver,
-		websocketURL: websocketURL,
-		cache:        newUdpCache(),
+		id:            id,
+		dnsResolver:   dnsResolver,
+		websocketURL:  config.WebsocketURL,
+		cache:         newUdpCache(),
+		withTimestamp: config.WithTimestamp,
 	}
 
-	reqq := newReqq(reqCap, wst)
+	reqq := newReqq(config.TunnelCap, wst)
 	wst.reqq = reqq
 
 	return wst
@@ -156,7 +159,10 @@ func (tnl *WSTunnel) onConnected(conn *websocket.Conn) {
 	tnl.wsLock.Lock()
 	defer tnl.wsLock.Unlock()
 
+	tnl.waitping = 0
+
 	if !tnl.isActivated {
+		log.Errorf("tunnel %d onConnected, but isn't activated, close websocket", tnl.id)
 		conn.Close()
 		tnl.ws = nil
 
@@ -183,6 +189,8 @@ func (tnl *WSTunnel) onDisconnected() {
 	tnl.wsLock.Lock()
 	defer tnl.wsLock.Unlock()
 
+	tnl.waitping = 0
+
 	if tnl.ws != nil {
 		tnl.ws.Close()
 		tnl.ws = nil
@@ -204,14 +212,16 @@ func (tnl *WSTunnel) keepalive() {
 		return
 	}
 
-	now := time.Now().Unix()
-	data := make([]byte, 8)
-	binary.LittleEndian.PutUint64(data, uint64(now))
-
 	if tnl.waitping > 3 {
+		log.Errorf("tunnel %d keepalive failed, close websocket", tnl.id)
+		tnl.waitping = 0
 		conn.Close()
 		return
 	}
+
+	now := time.Now().Unix()
+	data := make([]byte, 8)
+	binary.LittleEndian.PutUint64(data, uint64(now))
 
 	conn.SetWriteDeadline(time.Now().Add(websocketWriteDealine * time.Second))
 	err := conn.WriteMessage(websocket.PingMessage, data)
@@ -290,11 +300,14 @@ func (tnl *WSTunnel) processWebsocketMsg(msg []byte) {
 		return
 	}
 
+	tnl.waitping = 0
+
 	cmd := msg[0]
-	if cmd >= cMDReqBegin && cmd < cMDReqEnd {
-		tnl.processReqMsg(msg)
-	} else if cmd == cMDUDPReq {
+
+	if cmd == cMDUDPReq {
 		tnl.onServerUDPData(msg)
+	} else {
+		tnl.processReqMsg(msg)
 	}
 }
 
@@ -306,6 +319,8 @@ func (tnl *WSTunnel) processReqMsg(msg []byte) {
 	switch cmd {
 	case cMDReqData:
 		tnl.onServerReqData(idx, tag, msg[5:])
+	case cMDReqDataExt:
+		tnl.onServerReqDataExt(idx, tag, msg[5:])
 	case cMDReqServerFinished:
 		tnl.onSeverReqHalfClosed(idx, tag)
 	case cMDReqServerClosed:
@@ -323,16 +338,69 @@ func (tnl *WSTunnel) onServerReqData(idx, tag uint16, msg []byte) {
 		return
 	}
 
-	err = req.onServerData(msg)
+	err = req.onServerData(msg, true)
 	if err != nil {
 		log.Debugf("WSTunnel.onServerReqData call req.onServerData error:%v", err)
 	}
 }
 
+func (tnl *WSTunnel) onServerReqDataExt(idx, tag uint16, msg []byte) {
+	req, err := tnl.reqq.get(idx, tag)
+	if err != nil {
+		log.Debugf("WSTunnel.onServerReqDataExt error:%v", err)
+		return
+	}
+
+	tnl.dumpTimestamp(req, msg)
+
+	cut := len(msg) - (8 + 4*2)
+	err = req.onServerData(msg[0:cut], false)
+	if err != nil {
+		log.Debugf("WSTunnel.onServerReqDataExt call req.onServerData error:%v", err)
+	}
+}
+
+func (tnl *WSTunnel) dumpTimestamp(req *Req, msg []byte) {
+	ctx := req.ctx
+	if ctx == nil {
+		return
+	}
+
+	extraBytesLen := 8 + 4*2
+	size := len(msg)
+
+	if size <= extraBytesLen {
+		log.Errorf("tunnel %d dumpTimestamp failed, size %d not enough", tnl.id, size)
+		return
+	}
+
+	offset := size - extraBytesLen
+	unixMilli := binary.LittleEndian.Uint64(msg[offset:])
+	offset = offset + 8
+
+	unixMilliNow := time.Now().UnixMilli()
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("[%s]-->[%s],size:%d, timestamps[ms]:", ctx.To, ctx.From, size-extraBytesLen))
+
+	for i := 0; i < 4; i++ {
+		ts := binary.LittleEndian.Uint16(msg[offset:])
+		if ts == 0 {
+			break
+		}
+
+		offset = offset + 2
+		sb.WriteString(fmt.Sprintf("%d,", ts))
+	}
+
+	sb.WriteString(fmt.Sprintf("%d", unixMilliNow-int64(unixMilli)))
+	log.Info(sb.String())
+}
+
 func (tnl *WSTunnel) onSeverReqHalfClosed(idx, tag uint16) {
 	req, err := tnl.reqq.get(idx, tag)
 	if err != nil {
-		log.Debugf("WSTunnel.onServerReqData error:%v", err)
+		log.Debugf("WSTunnel.onSeverReqHalfClosed error:%v", err)
 		return
 	}
 
@@ -411,11 +479,29 @@ func (tnl *WSTunnel) onClientHalfClosed(idx uint16, tag uint16) {
 }
 
 func (tnl *WSTunnel) onClientReqData(idx uint16, tag uint16, data []byte) {
-	buf := make([]byte, 5+len(data))
-	buf[0] = cMDReqData
+	extraBytesLen := 0
+	if tnl.withTimestamp {
+		extraBytesLen = 8 + 4*2
+	}
+
+	cmdAndDataLen := 5 + len(data)
+	buf := make([]byte, cmdAndDataLen+extraBytesLen)
+
+	if tnl.withTimestamp {
+		buf[0] = cMDReqDataExt
+	} else {
+		buf[0] = cMDReqData
+	}
+
 	binary.LittleEndian.PutUint16(buf[1:], idx)
 	binary.LittleEndian.PutUint16(buf[3:], tag)
 	copy(buf[5:], data)
+
+	if tnl.withTimestamp {
+		// write timestamp
+		timestamp := uint64(time.Now().UnixMilli())
+		binary.LittleEndian.PutUint64(buf[cmdAndDataLen:], timestamp)
+	}
 
 	tnl.send(buf)
 }
@@ -472,6 +558,12 @@ func (tnl *WSTunnel) acceptHttpSocks5TCPConn(conn meta.TCPConn, target *meta.HTT
 		// send extra data
 		tnl.onClientReqData(req.idx, req.tag, target.ExtraBytes)
 	}
+
+	ctx := &ReqContext{
+		From: conn.RemoteAddr().String(),
+		To:   target.DomainName,
+	}
+	req.ctx = ctx
 
 	// read data from 'conn'
 	// NOTE: we need not to start a new goroutine here
