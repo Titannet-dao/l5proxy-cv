@@ -30,6 +30,10 @@ type Tunnel struct {
 	Cap   int `toml:"cap"`
 
 	WithTimestamp bool `toml:"timestamp"`
+
+	KeepaliveSeconds int `toml:"keepalive"`
+
+	KeepaliveLog bool `toml:"logka"`
 }
 
 type BypassMode struct {
@@ -101,6 +105,10 @@ func ParseConfig(filePath string) (*Config, error) {
 
 	if config.Tunnel.Count < 1 {
 		config.Tunnel.Count = 3
+	}
+
+	if config.Tunnel.KeepaliveSeconds <= 0 {
+		config.Tunnel.KeepaliveSeconds = 5
 	}
 
 	return &config, nil

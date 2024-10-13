@@ -17,6 +17,9 @@ type MgrConfig struct {
 	TunnelCap     int
 	WithTimestamp bool
 
+	KeepaliveSeconds int
+	KeepaliveLog     bool
+
 	Protector func(fd uint64)
 }
 
@@ -119,10 +122,11 @@ func (mgr *Mgr) Shutdown() error {
 func (mgr *Mgr) keepalive() {
 	count := len(mgr.tunnels)
 
-	log.Infof("remote.Mgr keepalive goroutine start, tunnel count:%d", count)
+	log.Infof("remote.Mgr keepalive goroutine start, tunnel count:%d, keepalive interval:%ds",
+		count, mgr.config.KeepaliveSeconds)
 
 	for mgr.isActivated {
-		time.Sleep(time.Second * 5)
+		time.Sleep(time.Second * time.Duration(mgr.config.KeepaliveSeconds))
 
 		for i := 0; i < count; i++ {
 			tnl := mgr.tunnels[i]

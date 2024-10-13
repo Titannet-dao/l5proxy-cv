@@ -58,6 +58,8 @@ type WSTunnel struct {
 	dnsResolver *mydns.AlibbResolver0
 
 	withTimestamp bool
+
+	keepaliveLog bool
 }
 
 func newTunnel(id int, dnsResolver *mydns.AlibbResolver0, config *MgrConfig) *WSTunnel {
@@ -67,6 +69,7 @@ func newTunnel(id int, dnsResolver *mydns.AlibbResolver0, config *MgrConfig) *WS
 		websocketURL:  config.WebsocketURL,
 		cache:         newUdpCache(),
 		withTimestamp: config.WithTimestamp,
+		keepaliveLog:  config.KeepaliveLog,
 	}
 
 	reqq := newReqq(config.TunnelCap, wst)
@@ -139,7 +142,7 @@ func (tnl *WSTunnel) serveWebsocket() {
 				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 					log.Errorf("websocket ReadMessage error: %v", err)
 				}
-				log.Errorf("tunnel ws ReadMessage failed %s", err.Error())
+				//log.Errorf("tunnel ws ReadMessage failed %s", err.Error())
 				break
 			}
 
@@ -219,9 +222,10 @@ func (tnl *WSTunnel) keepalive() {
 		return
 	}
 
-	now := time.Now().Unix()
-	data := make([]byte, 8)
-	binary.LittleEndian.PutUint64(data, uint64(now))
+	now := time.Now().UnixMilli()
+	data := make([]byte, 9)
+	data[0] = 1
+	binary.LittleEndian.PutUint64(data[1:], uint64(now))
 
 	conn.SetWriteDeadline(time.Now().Add(websocketWriteDealine * time.Second))
 	err := conn.WriteMessage(websocket.PingMessage, data)
@@ -252,8 +256,40 @@ func (tnl *WSTunnel) sendPong(data []byte) {
 	}
 }
 
-func (tnl *WSTunnel) onPong(_ []byte) {
+func (tnl *WSTunnel) onPong(data []byte) {
 	tnl.waitping = 0
+
+	if !tnl.keepaliveLog {
+		return
+	}
+
+	if len(data) < 1 || data[0] == 0 {
+		return
+	}
+
+	// dump timestamp
+	relayCount := int(data[0]) - 1
+
+	if len(data) != (1 + 8 + relayCount*2) {
+		return
+	}
+
+	var sb strings.Builder
+
+	sb.WriteString(fmt.Sprintf("Pinpon[%d] relay count:%d, timestamps:", tnl.id, relayCount))
+	offset := 1
+
+	for i := 0; i < relayCount; i++ {
+		ts := binary.LittleEndian.Uint16(data[offset:])
+		offset = offset + 2
+		sb.WriteString(fmt.Sprintf("%d,", ts))
+	}
+
+	unixMilli := binary.LittleEndian.Uint64(data[offset:])
+	unixMilliNow := time.Now().UnixMilli()
+
+	sb.WriteString(fmt.Sprintf("%d", unixMilliNow-int64(unixMilli)))
+	log.Info(sb.String())
 }
 
 func (tnl *WSTunnel) send(data []byte) {
@@ -351,7 +387,7 @@ func (tnl *WSTunnel) onServerReqDataExt(idx, tag uint16, msg []byte) {
 		return
 	}
 
-	tnl.dumpTimestamp(req, msg)
+	tnl.dumpDataExtraTimestamp(req, msg)
 
 	cut := len(msg) - (8 + 4*2)
 	err = req.onServerData(msg[0:cut], false)
@@ -360,7 +396,7 @@ func (tnl *WSTunnel) onServerReqDataExt(idx, tag uint16, msg []byte) {
 	}
 }
 
-func (tnl *WSTunnel) dumpTimestamp(req *Req, msg []byte) {
+func (tnl *WSTunnel) dumpDataExtraTimestamp(req *Req, msg []byte) {
 	ctx := req.ctx
 	if ctx == nil {
 		return

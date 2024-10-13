@@ -25,4 +25,7 @@ require (
 	golang.org/x/sys v0.22.0
 )
 
-require github.com/bits-and-blooms/bitset v1.14.3 // indirect
+require (
+	github.com/bits-and-blooms/bitset v1.14.3 // indirect
+	github.com/stretchr/testify v1.9.0 // indirect
+)
