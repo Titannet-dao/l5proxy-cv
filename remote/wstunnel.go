@@ -35,7 +35,6 @@ const (
 	cMDDNSReq            = 7
 	cMDDNSRsp            = 8
 	cMDUDPReq            = 9
-	cMDReqDataExt        = 10
 )
 
 type WSTunnel struct {
@@ -57,19 +56,16 @@ type WSTunnel struct {
 
 	dnsResolver *mydns.AlibbResolver0
 
-	withTimestamp bool
-
 	keepaliveLog bool
 }
 
 func newTunnel(id int, dnsResolver *mydns.AlibbResolver0, config *MgrConfig) *WSTunnel {
 	wst := &WSTunnel{
-		id:            id,
-		dnsResolver:   dnsResolver,
-		websocketURL:  config.WebsocketURL,
-		cache:         newUdpCache(),
-		withTimestamp: config.WithTimestamp,
-		keepaliveLog:  config.KeepaliveLog,
+		id:           id,
+		dnsResolver:  dnsResolver,
+		websocketURL: config.WebsocketURL,
+		cache:        newUdpCache(),
+		keepaliveLog: config.KeepaliveLog,
 	}
 
 	reqq := newReqq(config.TunnelCap, wst)
@@ -355,8 +351,6 @@ func (tnl *WSTunnel) processReqMsg(msg []byte) {
 	switch cmd {
 	case cMDReqData:
 		tnl.onServerReqData(idx, tag, msg[5:])
-	case cMDReqDataExt:
-		tnl.onServerReqDataExt(idx, tag, msg[5:])
 	case cMDReqServerFinished:
 		tnl.onSeverReqHalfClosed(idx, tag)
 	case cMDReqServerClosed:
@@ -378,59 +372,6 @@ func (tnl *WSTunnel) onServerReqData(idx, tag uint16, msg []byte) {
 	if err != nil {
 		log.Debugf("WSTunnel.onServerReqData call req.onServerData error:%v", err)
 	}
-}
-
-func (tnl *WSTunnel) onServerReqDataExt(idx, tag uint16, msg []byte) {
-	req, err := tnl.reqq.get(idx, tag)
-	if err != nil {
-		log.Debugf("WSTunnel.onServerReqDataExt error:%v", err)
-		return
-	}
-
-	tnl.dumpDataExtraTimestamp(req, msg)
-
-	cut := len(msg) - (8 + 4*2)
-	err = req.onServerData(msg[0:cut], false)
-	if err != nil {
-		log.Debugf("WSTunnel.onServerReqDataExt call req.onServerData error:%v", err)
-	}
-}
-
-func (tnl *WSTunnel) dumpDataExtraTimestamp(req *Req, msg []byte) {
-	ctx := req.ctx
-	if ctx == nil {
-		return
-	}
-
-	extraBytesLen := 8 + 4*2
-	size := len(msg)
-
-	if size <= extraBytesLen {
-		log.Errorf("tunnel %d dumpTimestamp failed, size %d not enough", tnl.id, size)
-		return
-	}
-
-	offset := size - extraBytesLen
-	unixMilli := binary.LittleEndian.Uint64(msg[offset:])
-	offset = offset + 8
-
-	unixMilliNow := time.Now().UnixMilli()
-
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("[%s]-->[%s],size:%d, timestamps[ms]:", ctx.To, ctx.From, size-extraBytesLen))
-
-	for i := 0; i < 4; i++ {
-		ts := binary.LittleEndian.Uint16(msg[offset:])
-		if ts == 0 {
-			break
-		}
-
-		offset = offset + 2
-		sb.WriteString(fmt.Sprintf("%d,", ts))
-	}
-
-	sb.WriteString(fmt.Sprintf("%d", unixMilliNow-int64(unixMilli)))
-	log.Info(sb.String())
 }
 
 func (tnl *WSTunnel) onSeverReqHalfClosed(idx, tag uint16) {
@@ -515,29 +456,13 @@ func (tnl *WSTunnel) onClientHalfClosed(idx uint16, tag uint16) {
 }
 
 func (tnl *WSTunnel) onClientReqData(idx uint16, tag uint16, data []byte) {
-	extraBytesLen := 0
-	if tnl.withTimestamp {
-		extraBytesLen = 8 + 4*2
-	}
-
 	cmdAndDataLen := 5 + len(data)
-	buf := make([]byte, cmdAndDataLen+extraBytesLen)
+	buf := make([]byte, cmdAndDataLen)
 
-	if tnl.withTimestamp {
-		buf[0] = cMDReqDataExt
-	} else {
-		buf[0] = cMDReqData
-	}
-
+	buf[0] = cMDReqData
 	binary.LittleEndian.PutUint16(buf[1:], idx)
 	binary.LittleEndian.PutUint16(buf[3:], tag)
 	copy(buf[5:], data)
-
-	if tnl.withTimestamp {
-		// write timestamp
-		timestamp := uint64(time.Now().UnixMilli())
-		binary.LittleEndian.PutUint64(buf[cmdAndDataLen:], timestamp)
-	}
 
 	tnl.send(buf)
 }

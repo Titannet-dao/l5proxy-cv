@@ -29,8 +29,6 @@ type Tunnel struct {
 	Count int `toml:"count"`
 	Cap   int `toml:"cap"`
 
-	WithTimestamp bool `toml:"timestamp"`
-
 	KeepaliveSeconds int `toml:"keepalive"`
 
 	KeepaliveLog bool `toml:"logka"`

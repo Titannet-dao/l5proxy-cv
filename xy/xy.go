@@ -52,7 +52,7 @@ func (xy *XY) Startup(cfg *config.Config) error {
 	}
 
 	remoteCfg := &remote.MgrConfig{WebsocketURL: websocketURL, TunnelCount: cfg.Tunnel.Count,
-		TunnelCap: cfg.Tunnel.Cap, Protector: protector, WithTimestamp: cfg.Tunnel.WithTimestamp,
+		TunnelCap: cfg.Tunnel.Cap, Protector: protector,
 		KeepaliveSeconds: cfg.Tunnel.KeepaliveSeconds,
 		KeepaliveLog:     cfg.Tunnel.KeepaliveLog}
 

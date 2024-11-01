@@ -12,10 +12,9 @@ import (
 )
 
 type MgrConfig struct {
-	WebsocketURL  string
-	TunnelCount   int
-	TunnelCap     int
-	WithTimestamp bool
+	WebsocketURL string
+	TunnelCount  int
+	TunnelCap    int
 
 	KeepaliveSeconds int
 	KeepaliveLog     bool
