@@ -91,7 +91,7 @@ func rebuildHTTPHeaders(r *http.Request) strings.Builder {
 	}
 
 	b.WriteString(fmt.Sprintf(" HTTP/%d.%d\r\n", r.ProtoMajor, r.ProtoMinor))
-
+	b.WriteString(fmt.Sprintf("Host: %s\r\n", r.Host))
 	for k, v := range r.Header {
 		for _, vv := range v {
 			b.WriteString(fmt.Sprintf("%s: %s\r\n", k, vv))
