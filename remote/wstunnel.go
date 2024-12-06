@@ -368,7 +368,7 @@ func (tnl *WSTunnel) onServerReqData(idx, tag uint16, msg []byte) {
 		return
 	}
 
-	err = req.onServerData(msg, true)
+	err = req.onServerData(msg, false)
 	if err != nil {
 		log.Debugf("WSTunnel.onServerReqData call req.onServerData error:%v", err)
 	}
