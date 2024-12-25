@@ -3,6 +3,7 @@ package localhttp
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"l5proxy_cv/meta"
 	"net"
@@ -16,8 +17,28 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
 
+// HTTP/HTTPS config
+// HTTPS self-signed certificate:
+//
+//	use the following command to generate a chrome acceptable self-signed certificate
+//
+//	openssl req -newkey rsa:2048 -x509 -nodes -keyout localhost.key -new -out localhost.crt -subj /CN=localhost -reqexts SAN -extensions SAN -config <(cat /etc/ssl/openssl.cnf \
+//	   <(printf '[SAN]\nsubjectAltName=DNS:localhost,IP:127.0.0.1')) -sha256 -days 3650
+//
+//	on-ubuntu:
+//		echo '/home/abc/localhost.crt' | sudo tee -a /etc/ca-certificates.conf
+//		sudo update-ca-certificates
+//
+// on-windows:
+//
+//	import as a root certificate
 type LocalConfig struct {
-	Address   string
+	Address string
+
+	HTTPsAddr string
+	Keyfile   string
+	Certfile  string
+
 	UseBypass bool
 
 	TransportHandler meta.HTTPSocks5TransportHandler
@@ -29,13 +50,30 @@ type Mgr struct {
 
 	defaultHandler *requestHandler
 	server         *http.Server
+	httpsServer    *http.Server
 }
 
 type httpconn struct {
-	*net.TCPConn
+	net.Conn
+
+	tcpc *net.TCPConn
 }
 
 func (hc httpconn) ID() *stack.TransportEndpointID {
+	return nil
+}
+
+func (hc httpconn) CloseWrite() error {
+	if hc.tcpc != nil {
+		return hc.tcpc.CloseWrite()
+	}
+	return nil
+}
+
+func (hc httpconn) CloseRead() error {
+	if hc.tcpc != nil {
+		return hc.tcpc.CloseRead()
+	}
 	return nil
 }
 
@@ -101,15 +139,41 @@ func rebuildHTTPHeaders(r *http.Request) strings.Builder {
 	return b
 }
 
+func setTCPKeepAlive(conn net.Conn) *net.TCPConn {
+	var tcpConn *net.TCPConn
+	tlsconn, ok := conn.(*tls.Conn)
+	if ok {
+		tcpConn, ok = tlsconn.NetConn().(*net.TCPConn)
+		if !ok {
+			return nil
+		}
+	} else {
+		tcpConn, ok = conn.(*net.TCPConn)
+		if !ok {
+			return nil
+		}
+	}
+
+	if tcpConn != nil {
+		tcpConn.SetKeepAlivePeriod(5 * time.Second)
+		tcpConn.SetNoDelay(true)
+		tcpConn.SetKeepAlive(true)
+	}
+
+	return tcpConn
+}
+
 func (rh *requestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	hj, ok := w.(http.Hijacker)
 	if !ok {
+		log.Info("localhttp.ServeHTTP Response doesn't support hijacking")
 		http.Error(w, "HTTP Response doesn't support hijacking", http.StatusInternalServerError)
 		return
 	}
 
 	conn, bufrw, err := hj.Hijack()
 	if err != nil {
+		log.Infof("localhttp.ServeHTTP Hijack failed:%v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -122,15 +186,7 @@ func (rh *requestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	targetInfo := &meta.HTTPSocksTargetInfo{}
-	tcpConn, ok := conn.(*net.TCPConn)
-	if !ok {
-		http.Error(w, "not tcp connection", http.StatusInternalServerError)
-		return
-	}
-
-	tcpConn.SetKeepAlivePeriod(5 * time.Second)
-	tcpConn.SetNoDelay(true)
-	tcpConn.SetKeepAlive(true)
+	var tcpConn = setTCPKeepAlive(conn)
 
 	uurl := r.URL
 	targetInfo.DomainName = uurl.Hostname()
@@ -139,6 +195,7 @@ func (rh *requestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var extraBytes []byte
 
 	if r.Method == http.MethodConnect {
+		log.Info("localhttp.ServeHTTP MethodConnect")
 		// CONNECT request
 		// write a reply to client
 		bufrw.WriteString("HTTP/1.1 200 Connection Established\r\n" +
@@ -154,6 +211,7 @@ func (rh *requestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	} else {
+		log.Info("localhttp.ServeHTTP normal request")
 		// normal request
 		builder := rebuildHTTPHeaders(r)
 		buffered := bufrw.Reader.Buffered()
@@ -177,14 +235,14 @@ func (rh *requestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if cfg.UseBypass && cfg.BypassHandler != nil {
 		bypass := cfg.BypassHandler
 		if bypass.BypassAble(targetInfo.DomainName) {
-			bypass.HandleHttpSocks5TCP(httpconn{TCPConn: tcpConn}, targetInfo)
+			bypass.HandleHttpSocks5TCP(httpconn{Conn: conn, tcpc: tcpConn}, targetInfo)
 			handled = true
 		}
 	}
 
 	if !handled {
 		thandler := cfg.TransportHandler
-		thandler.HandleHttpSocks5TCP(httpconn{TCPConn: tcpConn}, targetInfo)
+		thandler.HandleHttpSocks5TCP(httpconn{Conn: conn, tcpc: tcpConn}, targetInfo)
 		handled = true
 	}
 }
@@ -213,7 +271,16 @@ func (mgr *Mgr) Startup() error {
 	mgr.server = &http.Server{Addr: mgr.cfg.Address, Handler: mgr.defaultHandler}
 	log.Infof("HTTP server startup, address:%s", mgr.cfg.Address)
 
+	if mgr.cfg.HTTPsAddr != "" {
+		mgr.httpsServer = &http.Server{Addr: mgr.cfg.HTTPsAddr, Handler: mgr.defaultHandler,
+			TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler))} // only support HTTP/1.1, no HTTP/2
+		log.Infof("HTTPS server startup, address:%s", mgr.cfg.HTTPsAddr)
+	}
+
 	go mgr.serveHTTP()
+	if mgr.httpsServer != nil {
+		go mgr.serveHTTPs()
+	}
 
 	return nil
 }
@@ -238,6 +305,13 @@ func (mgr *Mgr) Shutdown() error {
 func (mgr *Mgr) serveHTTP() {
 	err := mgr.server.ListenAndServe()
 	if err != nil {
-		log.Errorf("localhttp.Mgr serveHTTP error:%s", err)
+		log.Errorf("localhttp.Mgr ListenAndServe error:%s", err)
+	}
+}
+
+func (mgr *Mgr) serveHTTPs() {
+	err := mgr.httpsServer.ListenAndServeTLS(mgr.cfg.Certfile, mgr.cfg.Keyfile)
+	if err != nil {
+		log.Errorf("localhttp.Mgr ListenAndServeTLS error:%s", err)
 	}
 }

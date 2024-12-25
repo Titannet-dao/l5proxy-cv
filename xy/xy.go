@@ -92,6 +92,9 @@ func (xy *XY) Startup(cfg *config.Config) error {
 			Address:          cfg.HTTPMode.Address,
 			UseBypass:        cfg.HTTPMode.Bypass && bypass != nil,
 			BypassHandler:    bypass,
+			HTTPsAddr:        cfg.HTTPMode.HTTPSAddr,
+			Certfile:         cfg.HTTPMode.Certfile,
+			Keyfile:          cfg.HTTPMode.Keyfile,
 		}
 
 		locals = append(locals, localhttp.NewMgr(localCfg))

@@ -40,9 +40,12 @@ type BypassMode struct {
 }
 
 type HTTPMode struct {
-	Enabled bool   `toml:"enabled"`
-	Address string `toml:"address"`
-	Bypass  bool   `toml:"bypass"`
+	Enabled   bool   `toml:"enabled"`
+	Address   string `toml:"address"`
+	HTTPSAddr string `toml:"httpsaddr"`
+	Certfile  string `toml:"certfile"`
+	Keyfile   string `toml:"keyfile"`
+	Bypass    bool   `toml:"bypass"`
 }
 
 type Socks5Mode struct {
