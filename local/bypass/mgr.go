@@ -18,6 +18,8 @@ type LocalConfig struct {
 	Protector func(fd uint64)
 
 	AliDNS string
+
+	All bool
 }
 
 type bypassconn struct {
@@ -56,7 +58,9 @@ func (mgr *Mgr) Startup() error {
 		return fmt.Errorf("bypass mode already startup")
 	}
 
-	go mgr.loadWhitelist()
+	if !mgr.cfg.All {
+		go mgr.loadWhitelist()
+	}
 
 	mgr.isActivated = true
 
@@ -167,6 +171,10 @@ func (mgr *Mgr) pipeTcpSocket(from meta.TCPConn, to meta.TCPConn, wg *sync.WaitG
 func (mgr *Mgr) BypassAble(ipOrDomainName string) bool {
 	if !mgr.isActivated {
 		return false
+	}
+
+	if mgr.cfg.All {
+		return true
 	}
 
 	if mgr.isLocalIP(ipOrDomainName) {

@@ -22,7 +22,7 @@ type XY struct {
 	lock sync.Mutex
 
 	locals []meta.Local
-	remote *remote.Mgr
+	remote remote.IMgr
 }
 
 func Singleton() *XY {
@@ -51,11 +51,16 @@ func (xy *XY) Startup(cfg *config.Config) error {
 		}
 	}
 
-	remoteCfg := &remote.MgrConfig{WebsocketURL: websocketURL, TunnelCount: cfg.Tunnel.Count,
-		TunnelCap: cfg.Tunnel.Cap, Protector: protector,
+	remoteCfg := &remote.MgrConfig{
+		WebsocketURL:     websocketURL,
+		TunnelCount:      cfg.Tunnel.Count,
+		TunnelCap:        cfg.Tunnel.Cap,
+		Protector:        protector,
 		KeepaliveSeconds: cfg.Tunnel.KeepaliveSeconds,
 		KeepaliveLog:     cfg.Tunnel.KeepaliveLog,
-		AliDNS:           cfg.Server.AliDNS}
+		AliDNS:           cfg.Server.AliDNS,
+		IsDummy:          cfg.Server.IsDummy,
+	}
 
 	remote := remote.NewMgr(remoteCfg)
 
@@ -67,6 +72,7 @@ func (xy *XY) Startup(cfg *config.Config) error {
 			WhitelistURL: cfg.BypassMode.WhitelistURL,
 			Protector:    protector,
 			AliDNS:       cfg.Server.AliDNS,
+			All:          cfg.BypassMode.All,
 		}
 
 		mgr := localbypass.NewMgr(localCfg)

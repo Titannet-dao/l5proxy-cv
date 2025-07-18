@@ -11,7 +11,15 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type IMgr interface {
+	meta.HTTPSocks5TransportHandler
+	meta.TunTransportHandler
+	Startup() error
+	Shutdown() error
+}
+
 type MgrConfig struct {
+	IsDummy      bool
 	AliDNS       string
 	WebsocketURL string
 	TunnelCount  int
@@ -35,8 +43,14 @@ type Mgr struct {
 	dnsResolver *mydns.AlibbResolver0
 }
 
-func NewMgr(config *MgrConfig) *Mgr {
+func NewMgr(config *MgrConfig) IMgr {
 	cfg := *config
+	if cfg.IsDummy {
+		return &DummyMgr{
+			config: cfg,
+		}
+	}
+
 	if len(cfg.WebsocketURL) == 0 {
 		cfg.WebsocketURL = "ws://127.0.0.1:8080/ws"
 	}

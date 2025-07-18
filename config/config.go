@@ -24,6 +24,7 @@ type Server struct {
 	Mark     int    `toml:"mark"`
 	LogLevel string `toml:"loglevel"`
 	AliDNS   string `toml:"alidns"`
+	IsDummy  bool   `toml:"dummy"`
 }
 
 type Tunnel struct {
@@ -37,6 +38,7 @@ type Tunnel struct {
 
 type BypassMode struct {
 	Enabled      bool   `toml:"enabled"`
+	All          bool   `toml:"all"`
 	WhitelistURL string `toml:"whitelist"`
 }
 
