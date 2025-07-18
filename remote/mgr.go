@@ -12,6 +12,7 @@ import (
 )
 
 type MgrConfig struct {
+	AliDNS       string
 	WebsocketURL string
 	TunnelCount  int
 	TunnelCap    int
@@ -59,7 +60,7 @@ func NewMgr(config *MgrConfig) *Mgr {
 
 	mgr := &Mgr{
 		config:      cfg,
-		dnsResolver: mydns.NewAlibbResolver(host, config.Protector),
+		dnsResolver: mydns.NewAlibbResolver(cfg.AliDNS, host, config.Protector),
 	}
 
 	return mgr

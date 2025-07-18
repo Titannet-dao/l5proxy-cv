@@ -1,6 +1,6 @@
 [server]
 # url: L5Proxy的WebSocket URL，建议使用WSS，也即是TLS加密连接
-url = "wss://js.abc.top/lFDBu0WTbYuClhPzXEFHyE3UWTicYU7dq9zhPLf5kqrDjOW2schlH2W5w8ZxQBV8"
+url = "wss://js.llwan.top/lFDBu0WTbYuClhPzXEFHyE3UWTicYU7dq9zhPLf5kqrDjOW2schlH2W5w8ZxQBV8"
 # UUID: 账户的唯一ID，必须提供，否则无法登录L5Proxy服务器
 uuid = "8870f4a1-063f-43a4-bac2-679a443b3d08"
 # endpoint：用于标志本台机器，除非需要从L5Proxy反向代理端口，否则不需要填写
@@ -16,7 +16,7 @@ cap = 100
 
 [bypass]
 enabled = true
-whitelist = "https://js.abc.top/lFDBu0WTbYuClhPzXEFHyE3UWTicYU7dq9zhPLf5kqrDjOW2schlH2W5w8ZxQBV8/whitelist"
+whitelist = "https://js.llwan.top/lFDBu0WTbYuClhPzXEFHyE3UWTicYU7dq9zhPLf5kqrDjOW2schlH2W5w8ZxQBV8/whitelist"
 
 [tun]
 enabled = false

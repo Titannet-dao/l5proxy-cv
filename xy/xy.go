@@ -54,7 +54,8 @@ func (xy *XY) Startup(cfg *config.Config) error {
 	remoteCfg := &remote.MgrConfig{WebsocketURL: websocketURL, TunnelCount: cfg.Tunnel.Count,
 		TunnelCap: cfg.Tunnel.Cap, Protector: protector,
 		KeepaliveSeconds: cfg.Tunnel.KeepaliveSeconds,
-		KeepaliveLog:     cfg.Tunnel.KeepaliveLog}
+		KeepaliveLog:     cfg.Tunnel.KeepaliveLog,
+		AliDNS:           cfg.Server.AliDNS}
 
 	remote := remote.NewMgr(remoteCfg)
 
@@ -65,6 +66,7 @@ func (xy *XY) Startup(cfg *config.Config) error {
 		localCfg := &localbypass.LocalConfig{
 			WhitelistURL: cfg.BypassMode.WhitelistURL,
 			Protector:    protector,
+			AliDNS:       cfg.Server.AliDNS,
 		}
 
 		mgr := localbypass.NewMgr(localCfg)

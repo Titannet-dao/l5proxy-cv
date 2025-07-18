@@ -16,6 +16,8 @@ type LocalConfig struct {
 	WhitelistURL string
 
 	Protector func(fd uint64)
+
+	AliDNS string
 }
 
 type bypassconn struct {

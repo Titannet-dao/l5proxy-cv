@@ -13,7 +13,7 @@ func TestResolve(t *testing.T) {
 	// 	}
 	// }
 
-	ip, err := resolveHost4("baobei.llwant.com", nil)
+	ip, err := resolveHost4("223.5.5.5:53", "baobei.llwant.com", nil)
 	if err != nil {
 		t.Errorf("failed resolveHost:%s", err)
 	}

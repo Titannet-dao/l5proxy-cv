@@ -36,6 +36,8 @@ type LocalConfig struct {
 	NSHint string
 
 	Protector func(fd uint64)
+
+	AliDNS string
 }
 
 type Mgr struct {

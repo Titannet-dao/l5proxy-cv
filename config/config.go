@@ -23,6 +23,7 @@ type Server struct {
 	Endpiont string `toml:"endpoint"`
 	Mark     int    `toml:"mark"`
 	LogLevel string `toml:"loglevel"`
+	AliDNS   string `toml:"alidns"`
 }
 
 type Tunnel struct {
@@ -80,6 +81,10 @@ func ParseConfig(filePath string) (*Config, error) {
 
 	if config.Server.URL == "" {
 		return nil, fmt.Errorf("Config must have a websocket URL")
+	}
+
+	if config.Server.AliDNS == "" {
+		config.Server.AliDNS = "223.5.5.5:53"
 	}
 
 	if config.TunMode.Enabled {

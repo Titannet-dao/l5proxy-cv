@@ -46,7 +46,7 @@ func (mgr *Mgr) handleDNSQuery(conn meta.UDPConn) {
 		return
 	}
 
-	reply, err := mydns.AlibbDNSQuery(data, mgr.cfg.Protector)
+	reply, err := mydns.AlibbDNSQuery(mgr.cfg.AliDNS, data, mgr.cfg.Protector)
 	if err != nil {
 		log.Errorf("localtun.Mgr handleDNSQuery alibbDNSQuery failed:%s", reply)
 		return

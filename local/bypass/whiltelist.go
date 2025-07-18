@@ -76,7 +76,7 @@ func (mgr *Mgr) loadWhitelist() {
 		host = url.Host
 	}
 
-	dnsResolver := mydns.NewAlibbResolver(host, mgr.cfg.Protector)
+	dnsResolver := mydns.NewAlibbResolver(mgr.cfg.AliDNS, host, mgr.cfg.Protector)
 
 	for {
 		m, err := loadWhitelist(dnsResolver, mgr.cfg.Protector, mgr.cfg.WhitelistURL)

@@ -14,7 +14,6 @@ import (
 )
 
 const (
-	alibbDNSServer     = "223.5.5.5:53" // use alibaba dns server
 	defaultDialTimeout = 5 * time.Second
 )
 
@@ -25,13 +24,16 @@ type AlibbResolver0 struct {
 	locker     sync.Mutex
 	isResolved bool
 	ip         net.IP
+
+	aliDNS string
 }
 
-func NewAlibbResolver(host string, protector func(fd uint64)) *AlibbResolver0 {
+func NewAlibbResolver(aliDNS1, host string, protector func(fd uint64)) *AlibbResolver0 {
 	return &AlibbResolver0{
 		host:       host,
 		protector:  protector,
 		isResolved: false,
+		aliDNS:     aliDNS1,
 	}
 }
 
@@ -52,7 +54,7 @@ func (r *AlibbResolver0) GetHostIP(host string) (net.IP, error) {
 	ip = net.ParseIP(r.host)
 	if ip == nil {
 		// not IP form, need DNS query
-		ip, err = resolveHost4(r.host, r.protector)
+		ip, err = resolveHost4(r.aliDNS, r.host, r.protector)
 		if err != nil {
 			return nil, err
 		}
@@ -64,7 +66,7 @@ func (r *AlibbResolver0) GetHostIP(host string) (net.IP, error) {
 	return ip, nil
 }
 
-func AlibbDNSQuery(data []byte, protector func(fd uint64)) ([]byte, error) {
+func AlibbDNSQuery(aliDNS1 string, data []byte, protector func(fd uint64)) ([]byte, error) {
 	var d *net.Dialer
 	if protector != nil {
 		d = &net.Dialer{
@@ -79,7 +81,7 @@ func AlibbDNSQuery(data []byte, protector func(fd uint64)) ([]byte, error) {
 		d = &net.Dialer{}
 	}
 
-	udpConn, err := d.Dial("udp", alibbDNSServer)
+	udpConn, err := d.Dial("udp", aliDNS1)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +108,7 @@ func AlibbDNSQuery(data []byte, protector func(fd uint64)) ([]byte, error) {
 	return buf, nil
 }
 
-func resolveHost4(host string, protector func(fd uint64)) (net.IP, error) {
+func resolveHost4(dnsServer, host string, protector func(fd uint64)) (net.IP, error) {
 	msg := new(mkdns.Msg)
 	msg.SetQuestion(mkdns.Fqdn(host), mkdns.TypeA)
 	packed, err := msg.Pack() // generate a DNS query packet
@@ -114,7 +116,7 @@ func resolveHost4(host string, protector func(fd uint64)) (net.IP, error) {
 		return nil, err
 	}
 
-	buf, err := AlibbDNSQuery(packed, protector)
+	buf, err := AlibbDNSQuery(dnsServer, packed, protector)
 	if err != nil {
 		return nil, err
 	}
